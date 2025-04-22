@@ -27,11 +27,13 @@ struct artk_t
 		popt->navsys = SYS_GPS | SYS_GLO | SYS_GAL | SYS_CMP;
 		popt->elmin = 10.0 * D2R;
 		popt->refpos = POSOPT_RTCM;
-		popt->glomodear = 0;
-		popt->bdsmodear = 0;
-		popt->dynamics = 2;
-		popt->modear = 0;
-		popt->nf = 2;/* default triple band L1+L2+L5 */
+		popt->glomodear = 0;/* GLO AR OFF */
+		popt->bdsmodear = 0;/* BDS AR OFF*/
+		popt->dynamics = 1; /* use PVA model */
+		popt->modear = 0;	/* AR OFF */
+		popt->nf = 2;/* default dual band L1+L2 */
+		popt->ionoopt = IONOOPT_BRDC;// IONOOPT_IFLC;
+		popt->tropopt = TROPOPT_SAAS;// TROPOPT_EST;
 		rtkinit(rtk, popt);
 	}
 	~artk_t()
@@ -177,7 +179,7 @@ struct artk_t
 		}
 		return ret;
 	}
-	int proc()
+	int proc(char *gga)
 	{
 		int ret = 0;
 		int i = 0;
@@ -201,15 +203,27 @@ struct artk_t
 				rtk->sol.rr[2] = rtk->rb[2];
 			}
 			rtk->opt.outsingle = 1;
+
 			rtkpos(rtk, cur_obs, nobs, &rtcm_nav->nav);
 			double diff[3] = { rtk->sol.rr[0] - rtk->rb[0], rtk->sol.rr[1] - rtk->rb[1], rtk->sol.rr[2] - rtk->rb[2] };
-			double dist = sqrt(diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2]);
 
-			printf("%s,%10.4f,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f,%10.6f,%10.6f,%10.6f,%3i,%10.3f,%10.3f\n", time_str(rtk->sol.time, 3), dist/1000.0, rtk->sol.rr[0], rtk->sol.rr[1], rtk->sol.rr[2], rtk->sol.rr[3], rtk->sol.rr[4], rtk->sol.rr[5], sqrt(rtk->sol.qr[0]), sqrt(rtk->sol.qr[1]), sqrt(rtk->sol.qr[2]), rtk->sol.ns, rtk->sol.age, rtk->sol.ratio);
+			double dist = sqrt(diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2]) / 1000.0;
+
+			if (dist < 30.0)
+			{
+				rtk->opt.modear = 3;
+			}
+			else
+			{
+				rtk->opt.modear = 0;
+			}
+
+			ret = outnmea_gga((uint8_t*)gga, &rtk->sol);
+
+			printf("%s,%10.4f,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f,%10.6f,%10.6f,%10.6f,%3i,%10.3f,%10.3f\n", time_str(rtk->sol.time, 3), dist, rtk->sol.rr[0], rtk->sol.rr[1], rtk->sol.rr[2], rtk->sol.rr[3], rtk->sol.rr[4], rtk->sol.rr[5], sqrt(rtk->sol.qr[0]), sqrt(rtk->sol.qr[1]), sqrt(rtk->sol.qr[2]), rtk->sol.ns, rtk->sol.age, rtk->sol.ratio);
 
 			delete[] cur_obs;
 			status.unlock();
-			ret = 1;
 		}
 		return ret;
 	}

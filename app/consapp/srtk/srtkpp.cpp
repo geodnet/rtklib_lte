@@ -369,10 +369,10 @@ static int process_log(const char* rovefname, const char* basefname, const char*
     int count = 0;
     int count_spp = 0;
 
-    FILE* fSOL = set_output_file(rovefname, ".csv");
+    FILE* fSOL = set_output_file(rovefname, ".nmea");
     if (fSOL)
     {
-        fprintf(fSOL, "wk,ws,lat,lon,ht,clk,res,lat1,lon1,ht1,clk1,res1\n");
+        //fprintf(fSOL, "wk,ws,lat,lon,ht,clk,res,lat1,lon1,ht1,clk1,res1\n");
     }
 
     while (true)
@@ -406,9 +406,10 @@ static int process_log(const char* rovefname, const char* basefname, const char*
             else
             {
             }
-            if (artk->proc())
+            char gga[255] = { 0 };
+            if (artk->proc(gga))
             {
-
+                if (fSOL) fprintf(fSOL, "%s", gga);
             }
             count++;
         }
