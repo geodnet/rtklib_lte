@@ -867,7 +867,7 @@ static int process_log(const char* rovefname, const char* basefname, const char*
 
     if (fSOL)
     {
-        fprintf(fSOL, "#time[yyy/mm/dd hh:mm:ss],baseline[km],solu_type[1=>FIX,2=>FLT],diffN[m],diffE[m],diffD[m],rmsX[m],rmsY[m],rmsZ[m],nsat,age[s],ratio\r\n");
+        fprintf(fSOL, "#time[yyy/mm/dd hh:mm:ss],baseline[km],solu_type[1=>FIX,2=>FLT],x[m],y[m],z[m],diffN[m],diffE[m],diffD[m],nsat,age[s],ratio\r\n");
     }
 
     while (true)
