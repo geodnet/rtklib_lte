@@ -21,7 +21,7 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{e6784ffd-4dd3-482d-8ca0-d781ab9bf451}</ProjectGuid>
+    <ProjectGuid>{28993B62-85FC-4E3D-8D37-14C3BC0B80B6}</ProjectGuid>
     <RootNamespace>rnx2rtkp</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
     <ProjectName>srtkpp</ProjectName>

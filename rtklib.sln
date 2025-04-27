@@ -9,6 +9,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rnx2rtkp", "app\consapp\rnx
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "log2rtcm", "app\consapp\log2rtcm\log2rtcm.vcxproj", "{B01EAC58-974C-48CE-AD8C-292C5EC4A526}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "srtkpp", "app\consapp\srtk\srtkpp.vcxproj", "{28993B62-85FC-4E3D-8D37-14C3BC0B80B6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -41,6 +43,14 @@ Global
 		{B01EAC58-974C-48CE-AD8C-292C5EC4A526}.Release|x64.Build.0 = Release|x64
 		{B01EAC58-974C-48CE-AD8C-292C5EC4A526}.Release|x86.ActiveCfg = Release|Win32
 		{B01EAC58-974C-48CE-AD8C-292C5EC4A526}.Release|x86.Build.0 = Release|Win32
+		{28993B62-85FC-4E3D-8D37-14C3BC0B80B6}.Debug|x64.ActiveCfg = Debug|x64
+		{28993B62-85FC-4E3D-8D37-14C3BC0B80B6}.Debug|x64.Build.0 = Debug|x64
+		{28993B62-85FC-4E3D-8D37-14C3BC0B80B6}.Debug|x86.ActiveCfg = Debug|Win32
+		{28993B62-85FC-4E3D-8D37-14C3BC0B80B6}.Debug|x86.Build.0 = Debug|Win32
+		{28993B62-85FC-4E3D-8D37-14C3BC0B80B6}.Release|x64.ActiveCfg = Release|x64
+		{28993B62-85FC-4E3D-8D37-14C3BC0B80B6}.Release|x64.Build.0 = Release|x64
+		{28993B62-85FC-4E3D-8D37-14C3BC0B80B6}.Release|x86.ActiveCfg = Release|Win32
+		{28993B62-85FC-4E3D-8D37-14C3BC0B80B6}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

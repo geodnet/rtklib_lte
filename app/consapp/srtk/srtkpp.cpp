@@ -337,8 +337,394 @@ struct station_t
     }
 };
 
+struct coord_t
+{
+    std::string name;
+    std::string coord_system_name;
+    double epoch;
+    double xyz[3];
+    double sigma95_xyz[3];
+    double amb_fix_rate;
+    coord_t()
+    {
+        epoch = 0;
+        xyz[0] = xyz[1] = xyz[2] = 0;
+        sigma95_xyz[0] = sigma95_xyz[1] = sigma95_xyz[2] = 0;
+        amb_fix_rate = 0;
+    }
+};
 
-static int process_log(const char* rovefname, const char* basefname, const char* brdcfname, int year, int mm, int dd)
+int remove_lead(char* buffer)
+{
+    size_t nlen = 0;
+    while ((nlen = strlen(buffer)) > 0)
+    {
+        if (buffer[0] == '\'') buffer[0] = ' ';
+        if (buffer[0] == '\"') buffer[0] = ' ';
+        if (buffer[0] == ' ')
+        {
+            std::rotate(buffer + 0, buffer + 1, buffer + nlen);
+            if (nlen > 0) buffer[nlen - 1] = '\0';
+        }
+        else
+        {
+            break;
+        }
+    }
+    while ((nlen = strlen(buffer)) > 0)
+    {
+        if (buffer[nlen - 1] == '\'' || buffer[nlen - 1] == '\"' || buffer[nlen - 1] == ',' || buffer[nlen - 1] == ' ')
+        {
+            buffer[nlen - 1] = '\0';
+        }
+        else
+        {
+            break;
+        }
+    }
+    return 1;
+}
+
+static int read_json_file(const char* fname, std::map<std::string, coord_t>& mCoords)
+{
+    int ret = 0;
+    FILE* fJSON = fopen(fname, "r");
+    char buffer[512] = { 0 };
+    int is_name_found = 0;
+    int is_itrf2020_found = 0;
+    int is_itrf2020_2015_found = 0;
+    int is_wgs84_found = 0;
+    int is_regional_found = 0;
+    int is_x = 0;
+    int is_y = 0;
+    int is_z = 0;
+    char* temp = NULL;
+    char* temp1 = NULL;
+
+    std::string name;
+    double sigma95_xyz[3] = { 0 };
+    double xyz_itrf2020[3] = { 0 };
+    double vxyz_itrf2020[3] = { 0 };
+    double xyz_regional[3] = { 0 };
+    double vxyz_regional[3] = { 0 };
+    double xyz_itrf2020_2015[3] = { 0 };
+    double xyz_wgs84[3] = { 0 };
+    double vxyz_wgs84[3] = { 0 };
+    double amb_fix_rate = 0;
+    double epoch_itrf2020 = 0;
+    double epoch_itrf2020_2015 = 0;
+    double epoch_regional = 0;
+    double epoch_wgs84 = 0;
+    std::string stime;
+    std::string ctime;
+    std::string coord_name_itrf2020;
+    std::string coord_name_itrf2020_2015;
+    std::string coord_name_regional;
+    std::string coord_name_wgs84;
+
+    FILE* fOUT = fopen("coords.json", "a");
+
+    while (fJSON && !feof(fJSON) && fgets(buffer, sizeof(buffer), fJSON))
+    {
+        if (fOUT) fprintf(fOUT, "%s", buffer);
+        //printf("%s", buffer);
+        if (temp = strchr(buffer, '\n')) temp[0] = '\0';
+        remove_lead(buffer);
+        if (is_name_found)
+        {
+            if (is_itrf2020_found == 1)
+            {
+                if ((temp = strstr(buffer, "x:")) && (temp1 = strstr(temp, ":")))
+                {
+                    if (strstr(buffer, "vx:"))
+                        vxyz_itrf2020[0] = atof(temp1 + 1);
+                    else
+                        xyz_itrf2020[0] = atof(temp1 + 1);
+                }
+                if ((temp = strstr(buffer, "y:")) && (temp1 = strstr(temp, ":")))
+                {
+                    if (strstr(buffer, "vy:"))
+                        vxyz_itrf2020[1] = atof(temp1 + 1);
+                    else
+                        xyz_itrf2020[1] = atof(temp1 + 1);
+                }
+                if ((temp = strstr(buffer, "z:")) && (temp1 = strstr(temp, ":")))
+                {
+                    if (strstr(buffer, "vz:"))
+                        vxyz_itrf2020[2] = atof(temp1 + 1);
+                    else
+                        xyz_itrf2020[2] = atof(temp1 + 1);
+                }
+                if ((temp = strstr(buffer, "iar:")) && (temp1 = strstr(temp, ":")))
+                {
+                    amb_fix_rate = atof(temp1 + 1);
+                }
+                if ((temp = strstr(buffer, "epoch:")) && (temp1 = strstr(temp, ":")))
+                {
+                    epoch_itrf2020 = atof(temp1 + 1);
+                }
+                if ((temp = strstr(buffer, "sigma95X:")) && (temp1 = strstr(temp, ":")))
+                {
+                    sigma95_xyz[0] = atof(temp1 + 1);
+                }
+                if ((temp = strstr(buffer, "sigma95Y:")) && (temp1 = strstr(temp, ":")))
+                {
+                    sigma95_xyz[1] = atof(temp1 + 1);
+                }
+                if ((temp = strstr(buffer, "sigma95Z:")) && (temp1 = strstr(temp, ":")))
+                {
+                    sigma95_xyz[2] = atof(temp1 + 1);
+                }
+                if ((temp = strstr(buffer, "dateObserved:")) && (temp1 = strstr(temp, ":")))
+                {
+                    remove_lead(temp1 + 1);
+                    char* temp11 = strchr(temp1 + 1, ' ');
+                    if (temp11) temp11[0] = '\0';
+                    stime = std::string(temp1 + 1);
+                }
+                if ((temp = strstr(buffer, "dateComputed:")) && (temp1 = strstr(temp, ":")))
+                {
+                    remove_lead(temp1 + 1);
+                    char* temp11 = strchr(temp1 + 1, ' ');
+                    if (temp11) temp11[0] = '\0';
+                    ctime = std::string(temp1 + 1);
+                }
+                if ((temp = strstr(buffer, "name:")) && (temp1 = strstr(temp, ":")))
+                {
+                    remove_lead(temp1 + 1);
+                    coord_name_itrf2020 = std::string(temp1 + 1);
+                }
+                if (strstr(buffer, "}"))
+                {
+                    is_itrf2020_found = 2;
+                }
+            }
+            else if (!is_itrf2020_found && strstr(buffer, "itrf2020:"))
+            {
+                is_itrf2020_found = 1;
+            }
+            if (is_itrf2020_2015_found == 1)
+            {
+                if (!strstr(buffer, "vx:") && (temp = strstr(buffer, "x:")) && (temp1 = strstr(temp, ":")))
+                {
+                    xyz_itrf2020_2015[0] = atof(temp1 + 1);
+                }
+                if ((temp = strstr(buffer, "vx:")) && (temp1 = strstr(temp, ":")))
+                {
+                    vxyz_itrf2020[0] = atof(temp1 + 1);
+                }
+                if (!strstr(buffer, "vy:") && (temp = strstr(buffer, "y:")) && (temp1 = strstr(temp, ":")))
+                {
+                    xyz_itrf2020_2015[1] = atof(temp1 + 1);
+                }
+                if ((temp = strstr(buffer, "vy:")) && (temp1 = strstr(temp, ":")))
+                {
+                    vxyz_itrf2020[1] = atof(temp1 + 1);
+                }
+                if (!strstr(buffer, "vz:") && (temp = strstr(buffer, "z:")) && (temp1 = strstr(temp, ":")))
+                {
+                    xyz_itrf2020_2015[2] = atof(temp1 + 1);
+                }
+                if ((temp = strstr(buffer, "vz:")) && (temp1 = strstr(temp, ":")))
+                {
+                    vxyz_itrf2020[2] = atof(temp1 + 1);
+                }
+                if ((temp = strstr(buffer, "name:")) && (temp1 = strstr(temp, ":")))
+                {
+                    remove_lead(temp1 + 1);
+                    coord_name_itrf2020_2015 = std::string(temp1 + 1);
+                    std::size_t nloc = coord_name_itrf2020_2015.find_last_of('(');
+                    if (nloc != std::string::npos)
+                    {
+                        epoch_itrf2020_2015 = atof(coord_name_itrf2020_2015.substr(nloc + 1).c_str());
+                    }
+                    else
+                    {
+                        epoch_itrf2020_2015 = atof(coord_name_itrf2020_2015.c_str());
+                    }
+                }
+                if (strstr(buffer, "}"))
+                {
+                    is_itrf2020_2015_found = 2;
+                }
+            }
+            else if (!is_itrf2020_2015_found && strstr(buffer, "itrf2015:"))
+            {
+                is_itrf2020_2015_found = 1;
+            }
+            if (is_wgs84_found == 1)
+            {
+                if ((temp = strstr(buffer, "x:")) && (temp1 = strstr(temp, ":")))
+                {
+                    if (strstr(buffer, "vx:"))
+                        vxyz_wgs84[0] = atof(temp1 + 1);
+                    else
+                        xyz_wgs84[0] = atof(temp1 + 1);
+                }
+                if ((temp = strstr(buffer, "y:")) && (temp1 = strstr(temp, ":")))
+                {
+                    if (strstr(buffer, "vy:"))
+                        vxyz_wgs84[1] = atof(temp1 + 1);
+                    else
+                        xyz_wgs84[1] = atof(temp1 + 1);
+                }
+                if ((temp = strstr(buffer, "z:")) && (temp1 = strstr(temp, ":")))
+                {
+                    if (strstr(buffer, "vz:"))
+                        vxyz_wgs84[2] = atof(temp1 + 1);
+                    else
+                        xyz_wgs84[2] = atof(temp1 + 1);
+                }
+                if ((temp = strstr(buffer, "name:")) && (temp1 = strstr(temp, ":")))
+                {
+                    remove_lead(temp1 + 1);
+                    coord_name_wgs84 = std::string(temp1 + 1);
+                    std::size_t nloc = coord_name_wgs84.find_last_of('(');
+                    if (nloc != std::string::npos)
+                    {
+                        epoch_wgs84 = atof(coord_name_wgs84.substr(nloc + 1).c_str());
+                    }
+                    else
+                    {
+                        epoch_wgs84 = atof(coord_name_wgs84.c_str());
+                    }
+                }
+                if (strstr(buffer, "}"))
+                {
+                    is_wgs84_found = 2;
+                }
+            }
+            else if (!is_wgs84_found && strstr(buffer, "wgs84:"))
+            {
+                is_wgs84_found = 1;
+            }
+
+            if (is_regional_found == 1)
+            {
+                if ((temp = strstr(buffer, "x:")) && (temp1 = strstr(temp, ":")))
+                {
+                    if (strstr(buffer, "vx:"))
+                        vxyz_regional[0] = atof(temp1 + 1);
+                    else
+                        xyz_regional[0] = atof(temp1 + 1);
+                }
+                if ((temp = strstr(buffer, "y:")) && (temp1 = strstr(temp, ":")))
+                {
+                    if (strstr(buffer, "vy:"))
+                        vxyz_regional[1] = atof(temp1 + 1);
+                    else
+                        xyz_regional[1] = atof(temp1 + 1);
+                }
+                if ((temp = strstr(buffer, "z:")) && (temp1 = strstr(temp, ":")))
+                {
+                    if (strstr(buffer, "vz:"))
+                        vxyz_regional[2] = atof(temp1 + 1);
+                    else
+                        xyz_regional[2] = atof(temp1 + 1);
+                }
+                if ((temp = strstr(buffer, "name:")) && (temp1 = strstr(temp, ":")))
+                {
+                    remove_lead(temp1 + 1);
+                    coord_name_regional = std::string(temp1 + 1);
+                    std::size_t nloc = coord_name_regional.find_last_of('(');
+                    if (nloc != std::string::npos)
+                    {
+                        epoch_regional = atof(coord_name_regional.substr(nloc + 1).c_str());
+                    }
+                    else
+                    {
+                        epoch_regional = atof(coord_name_regional.c_str());
+                    }
+                }
+                if (strstr(buffer, "}"))
+                {
+                    is_regional_found = 2;
+                }
+            }
+            else if (!is_regional_found && strstr(buffer, "regional:"))
+            {
+                is_regional_found = 1;
+            }
+            if (name.size() > 0 && is_itrf2020_found == 2 && is_itrf2020_2015_found == 2 && is_wgs84_found == 2 && is_regional_found == 2)
+            {
+                double vel3D = sqrt(vxyz_itrf2020[0] * vxyz_itrf2020[0] + vxyz_itrf2020[1] * vxyz_itrf2020[1] + vxyz_itrf2020[2] * vxyz_itrf2020[2]);
+                if (vel3D > 0.5)
+                {
+                    vxyz_itrf2020[0] /= 1000.0;
+                    vxyz_itrf2020[1] /= 1000.0;
+                    vxyz_itrf2020[2] /= 1000.0;
+                }
+                double vel3D_r = sqrt(vxyz_regional[0] * vxyz_regional[0] + vxyz_regional[1] * vxyz_regional[1] + vxyz_regional[2] * vxyz_regional[2]);
+                if (vel3D_r > 0.5)
+                {
+                    vxyz_regional[0] /= 1000.0;
+                    vxyz_regional[1] /= 1000.0;
+                    vxyz_regional[2] /= 1000.0;
+                }
+                double vel3D_wgs84 = sqrt(vxyz_wgs84[0] * vxyz_wgs84[0] + vxyz_wgs84[1] * vxyz_wgs84[1] + vxyz_wgs84[2] * vxyz_wgs84[2]);
+                if (vel3D_wgs84 > 0.5)
+                {
+                    vxyz_wgs84[0] /= 1000.0;
+                    vxyz_wgs84[1] /= 1000.0;
+                    vxyz_wgs84[2] /= 1000.0;
+                }
+                /* add */
+                coord_t coord;
+                coord.name = name;
+                coord.coord_system_name = coord_name_itrf2020;
+                coord.epoch = epoch_itrf2020;
+                coord.amb_fix_rate = amb_fix_rate;
+                coord.xyz[0] = xyz_itrf2020[0];
+                coord.xyz[1] = xyz_itrf2020[1];
+                coord.xyz[2] = xyz_itrf2020[2];
+                coord.sigma95_xyz[0] = sigma95_xyz[0];
+                coord.sigma95_xyz[1] = sigma95_xyz[1];
+                coord.sigma95_xyz[2] = sigma95_xyz[2];
+                mCoords[name] = coord;
+                /* reset */
+                name.clear();
+                memset(sigma95_xyz, 0, sizeof(sigma95_xyz));
+                memset(xyz_itrf2020, 0, sizeof(xyz_itrf2020));
+                memset(vxyz_itrf2020, 0, sizeof(vxyz_itrf2020));
+                memset(xyz_regional, 0, sizeof(xyz_regional));
+                memset(vxyz_regional, 0, sizeof(vxyz_regional));
+                memset(xyz_itrf2020_2015, 0, sizeof(xyz_itrf2020_2015));
+                memset(xyz_wgs84, 0, sizeof(xyz_wgs84));
+                memset(vxyz_wgs84, 0, sizeof(vxyz_wgs84));
+
+                amb_fix_rate = 0;
+                epoch_itrf2020 = 0;
+                epoch_itrf2020_2015 = 0;
+                epoch_regional = 0;
+                epoch_wgs84 = 0;
+                stime.clear();
+                ctime.clear();
+                coord_name_itrf2020.clear();
+                coord_name_itrf2020_2015.clear();
+                coord_name_regional.clear();
+                coord_name_wgs84.clear();
+                /* find next one */
+                is_name_found = 0;
+            }
+        }
+        else if ((temp = strstr(buffer, "name:")) && (temp1 = strstr(temp, ":")))
+        {
+            remove_lead(temp1 + 1);
+            name = std::string(temp1 + 1);
+            is_name_found = 1;
+            is_itrf2020_found = 0;
+            is_itrf2020_2015_found = 0;
+            is_wgs84_found = 0;
+            is_regional_found = 0;
+        }
+    }
+    if (fJSON) fclose(fJSON);
+    if (fOUT) fclose(fOUT);
+    return ret;
+}
+
+
+static int process_log(const char* rovefname, const char* basefname, const char* brdcfname, int year, int mm, int dd, std::map<std::string, coord_t>& mCoords)
 {
     int ret = 0;
     artk_t* artk = new artk_t;
@@ -363,16 +749,42 @@ static int process_log(const char* rovefname, const char* basefname, const char*
     double* pos_rove = pos;
     double* pos_base = pos + 3;
 
+    FILE* fGGA = set_output_file(rovefname, ".nmea");
+    FILE* fSOL = set_output_file(rovefname, ".csv");
+
+    std::string rove_name;
+    std::string base_name;
+    for (std::map<std::string, coord_t>::iterator pCoord = mCoords.begin(); pCoord != mCoords.end(); ++pCoord)
+    {
+        if (rove_name.length() > 0 && base_name.length() > 0) break;
+        if (strstr(rovefname, pCoord->first.c_str()))
+        {
+            rove_name = pCoord->first;
+            if (fSOL)
+            {
+                fprintf(fSOL,"#%15s,%20s,%15.6f,%7.2f,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f\r\n", pCoord->first.c_str(), pCoord->second.coord_system_name.c_str(), pCoord->second.epoch, pCoord->second.amb_fix_rate, pCoord->second.xyz[0], pCoord->second.xyz[1], pCoord->second.xyz[2], pCoord->second.sigma95_xyz[0], pCoord->second.sigma95_xyz[1], pCoord->second.sigma95_xyz[2]);
+            }
+            printf("%15s,%20s,%15.6f,%7.2f,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f\n", pCoord->first.c_str(), pCoord->second.coord_system_name.c_str(), pCoord->second.epoch, pCoord->second.amb_fix_rate, pCoord->second.xyz[0], pCoord->second.xyz[1], pCoord->second.xyz[2], pCoord->second.sigma95_xyz[0], pCoord->second.sigma95_xyz[1], pCoord->second.sigma95_xyz[2]);
+        }
+        if (strstr(basefname, pCoord->first.c_str()))
+        {
+            base_name = pCoord->first;
+            if (fSOL)
+            {
+                fprintf(fSOL,"#%15s,%20s,%15.6f,%7.2f,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f\r\n", pCoord->first.c_str(), pCoord->second.coord_system_name.c_str(), pCoord->second.epoch, pCoord->second.amb_fix_rate, pCoord->second.xyz[0], pCoord->second.xyz[1], pCoord->second.xyz[2], pCoord->second.sigma95_xyz[0], pCoord->second.sigma95_xyz[1], pCoord->second.sigma95_xyz[2]);
+            }
+            printf("%15s,%20s,%15.6f,%7.2f,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f\n", pCoord->first.c_str(), pCoord->second.coord_system_name.c_str(), pCoord->second.epoch, pCoord->second.amb_fix_rate, pCoord->second.xyz[0], pCoord->second.xyz[1], pCoord->second.xyz[2], pCoord->second.sigma95_xyz[0], pCoord->second.sigma95_xyz[1], pCoord->second.sigma95_xyz[2]);
+        }
+    }
 
     double dt = 0;
 
     int count = 0;
     int count_spp = 0;
 
-    FILE* fSOL = set_output_file(rovefname, ".nmea");
     if (fSOL)
     {
-        //fprintf(fSOL, "wk,ws,lat,lon,ht,clk,res,lat1,lon1,ht1,clk1,res1\n");
+        fprintf(fSOL, "#time[yyy/mm/dd hh:mm:ss],baseline[km],solu_type[1=>FIX,2=>FLT],diffN[m],diffE[m],diffD[m],rmsX[m],rmsY[m],rmsZ[m],nsat,age[s],ratio\r\n");
     }
 
     while (true)
@@ -395,6 +807,31 @@ static int process_log(const char* rovefname, const char* basefname, const char*
             }
             if (!nsat[1]) break;
         }
+        /* use external coordinate */
+        if (rove_name.length() > 0)
+        {
+            if (fabs(mCoords[rove_name].xyz[0]) < 0.001 || fabs(mCoords[rove_name].xyz[1]) < 0.001 || fabs(mCoords[rove_name].xyz[2]) < 0.001)
+            {
+            }
+            else
+            {
+                pos_rove[0] = mCoords[rove_name].xyz[0];
+                pos_rove[1] = mCoords[rove_name].xyz[1];
+                pos_rove[2] = mCoords[rove_name].xyz[2];
+            }
+        }
+        if (base_name.length() > 0)
+        {
+            if (fabs(mCoords[base_name].xyz[0]) < 0.001 || fabs(mCoords[base_name].xyz[1]) < 0.001 || fabs(mCoords[base_name].xyz[2]) < 0.001)
+            {
+            }
+            else
+            {
+                pos_base[0] = mCoords[base_name].xyz[0];
+                pos_base[1] = mCoords[base_name].xyz[1];
+                pos_base[2] = mCoords[base_name].xyz[2];
+            }
+        }
         /* base and rove data ready */
         if (nsat[0] > 0 && artk->add_rove_obs(obs_rove, nsat[0], pos_rove))
         {
@@ -407,9 +844,11 @@ static int process_log(const char* rovefname, const char* basefname, const char*
             {
             }
             char gga[255] = { 0 };
-            if (artk->proc(gga))
+            char sol[255] = { 0 };
+            if (artk->proc(gga, sol))
             {
-                if (fSOL) fprintf(fSOL, "%s", gga);
+                if (fGGA) { fprintf(fGGA, "%s", gga); fflush(fGGA); }
+                if (fSOL) { fprintf(fSOL, "%s", sol); fflush(fSOL); }
             }
             count++;
         }
@@ -422,7 +861,21 @@ static int process_log(const char* rovefname, const char* basefname, const char*
 
     delete artk;
 
+    printf("rove=%s\n", rovefname);
+    printf("base=%s\n", basefname);
+    printf("brdc=%s\n", brdcfname);
+
+    if (fSOL)
+    {
+        fprintf(fSOL, "#rove=%s\n", rovefname);
+        fprintf(fSOL, "#base=%s\n", basefname);
+        fprintf(fSOL, "#brdc=%s\n", brdcfname);
+    }
+
     if (fSOL) fclose(fSOL);
+    if (fGGA) fclose(fGGA);
+
+
 
     return ret;
 }
@@ -444,6 +897,8 @@ int main(int argc, char** argv)
         std::string rovefname;
         std::string basefname;
         std::string brdcfname;
+        std::map<std::string, coord_t> mCoords;
+        std::string jsonfname;
         char* temp = nullptr;
         for (int i = 1; i < argc; ++i)
         {
@@ -457,6 +912,11 @@ int main(int argc, char** argv)
                 else if (strstr(argv[i], "base"))
                 {
                     basefname = std::string(temp + 1);
+                }
+                else if (strstr(argv[i], "json"))
+                {
+                    jsonfname = std::string(temp + 1);
+                    read_json_file(jsonfname.c_str(), mCoords);
                 }
                 else if (strstr(argv[i], "brdc"))
                 {
@@ -483,13 +943,10 @@ int main(int argc, char** argv)
         clock_t stime = clock();
 
 
-        ret = process_log(rovefname.c_str(), basefname.c_str(), brdcfname.c_str(), yyyy, mm, dd);
+        ret = process_log(rovefname.c_str(), basefname.c_str(), brdcfname.c_str(), yyyy, mm, dd, mCoords);
 
         clock_t etime = clock();
         double cpu_time_used = ((double)(etime - stime)) / CLOCKS_PER_SEC;
-        printf("rove=%s\n", rovefname.c_str());
-        printf("base=%s\n", basefname.c_str());
-        printf("brdc=%s\n", brdcfname.c_str());
         printf("time=%.3f[s]\n", cpu_time_used);
     }
     return ret;
