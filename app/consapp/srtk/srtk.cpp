@@ -283,8 +283,7 @@ int artk_t::proc(char* gga, char *sol)
 
 			if (sol)
 			{
-				//printf("%s,%10.4f,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f,%10.6f,%10.6f,%10.6f,%3i,%10.3f,%10.3f\n", time_str(rtk->sol.time, 3), dist, rtk->sol.rr[0], rtk->sol.rr[1], rtk->sol.rr[2], rtk->sol.rr[3], rtk->sol.rr[4], rtk->sol.rr[5], sqrt(rtk->sol.qr[0]), sqrt(rtk->sol.qr[1]), sqrt(rtk->sol.qr[2]), rtk->sol.ns, rtk->sol.age, rtk->sol.ratio);
-				sprintf(sol, "%s,%10.4f,%2i,%14.4f,%14.4f,%14.4f,%10.6f,%10.6f,%10.6f,%3i,%10.3f,%10.3f\r\n", time_str(rtk->sol.time, 3), dist, rtk->sol.stat, dned[0], dned[1], dned[2], sqrt(rtk->sol.qr[0]), sqrt(rtk->sol.qr[1]), sqrt(rtk->sol.qr[2]), rtk->sol.ns, rtk->sol.age, rtk->sol.ratio);
+				sprintf(sol, "%s,%10.4f,%2i,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f,%3i,%10.3f,%10.3f\r\n", time_str(rtk->sol.time, 3), dist, rtk->sol.stat, rtk->sol.rr[0], rtk->sol.rr[1], rtk->sol.rr[2], dned[0], dned[1], dned[2], rtk->sol.ns, rtk->sol.age, rtk->sol.ratio);
 			}
 
 			nav_lock.unlock();

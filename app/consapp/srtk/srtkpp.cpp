@@ -422,11 +422,8 @@ static int read_json_file(const char* fname, std::map<std::string, coord_t>& mCo
     std::string coord_name_regional;
     std::string coord_name_wgs84;
 
-    FILE* fOUT = fopen("coords.json", "a");
-
     while (fJSON && !feof(fJSON) && fgets(buffer, sizeof(buffer), fJSON))
     {
-        if (fOUT) fprintf(fOUT, "%s", buffer);
         //printf("%s", buffer);
         if (temp = strchr(buffer, '\n')) temp[0] = '\0';
         remove_lead(buffer);
@@ -719,7 +716,90 @@ static int read_json_file(const char* fname, std::map<std::string, coord_t>& mCo
         }
     }
     if (fJSON) fclose(fJSON);
-    if (fOUT) fclose(fOUT);
+    return ret;
+}
+
+struct solu_t
+{
+    std::string time;
+    int nsat;
+    int type;
+    double xyz[3];
+    double ned[3];
+    double age;
+    double ratio;
+    solu_t()
+    {
+        memset(&time, 0, sizeof(gtime_t));
+        nsat = 0;
+        type = 0;
+        xyz[0] = xyz[1] = xyz[2] = 0;
+        ned[0] = ned[1] = ned[2] = 0;
+        age = 0;
+        ratio = 0;
+    }
+    int parse(char* sol)
+    {
+        int ret = 0;
+        char* temp = strchr(sol, ',');
+        if (temp)
+        {
+            double dist = 0;
+            int n = sscanf(temp+1, "%lf,%i,%lf,%lf,%lf,%lf,%lf,%lf,%i,%lf,%lf", &dist, &type, xyz + 0, xyz + 1, xyz + 2, ned + 0, ned + 1, ned + 2, &nsat, &age, &ratio);
+            if (n >= 11)
+            {
+                ret = 1;
+            }
+        }
+        return ret;
+    }
+};
+
+//inline bool operator==(const solu_t& l, const solu_t& r) {
+//    return l.time==r.time;
+//}
+//inline bool operator<(const solu_t& l, const solu_t& r) {
+//    return l.time < r.time;
+//}
+
+static int solution_status(std::vector<solu_t>& solu, int *nfix, double *sfix, int *nrtk, double *srtk)
+{
+    int ret = 0;
+    *nfix = 0;
+    *nrtk = 0;
+    sfix[0] = sfix[1] = sfix[2] = 0;
+    srtk[0] = srtk[1] = srtk[2] = 0;
+    for (std::vector<solu_t>::iterator pSolu = solu.begin(); pSolu != solu.end(); ++pSolu)
+    {
+        if (pSolu->type == 1 || pSolu->type == 2)
+        {
+            if (pSolu->type == 1)
+            {
+                sfix[0] += pSolu->ned[0] * pSolu->ned[0];
+                sfix[1] += pSolu->ned[1] * pSolu->ned[1];
+                sfix[2] += pSolu->ned[2] * pSolu->ned[2];
+                ++(*nfix);
+            }
+            srtk[0] += pSolu->ned[0] * pSolu->ned[0];
+            srtk[1] += pSolu->ned[1] * pSolu->ned[1];
+            srtk[2] += pSolu->ned[2] * pSolu->ned[2];
+            ++(*nrtk);
+        }
+    }
+    if (*nrtk > 60)
+    {
+        srtk[0] = sqrt(srtk[0] / (*nrtk - 1));
+        srtk[1] = sqrt(srtk[1] / (*nrtk - 1));
+        srtk[2] = sqrt(srtk[2] / (*nrtk - 1));
+        ret = 1;
+        if (*nfix > 60)
+        {
+            sfix[0] = sqrt(sfix[0] / (*nfix - 1));
+            sfix[1] = sqrt(sfix[1] / (*nfix - 1));
+            sfix[2] = sqrt(sfix[2] / (*nfix - 1));
+            ret = 2;
+        }
+    }
     return ret;
 }
 
@@ -754,6 +834,9 @@ static int process_log(const char* rovefname, const char* basefname, const char*
 
     std::string rove_name;
     std::string base_name;
+
+    std::vector<solu_t> vSolu;
+
     for (std::map<std::string, coord_t>::iterator pCoord = mCoords.begin(); pCoord != mCoords.end(); ++pCoord)
     {
         if (rove_name.length() > 0 && base_name.length() > 0) break;
@@ -849,10 +932,29 @@ static int process_log(const char* rovefname, const char* basefname, const char*
             {
                 if (fGGA) { fprintf(fGGA, "%s", gga); fflush(fGGA); }
                 if (fSOL) { fprintf(fSOL, "%s", sol); fflush(fSOL); }
+                solu_t solu;
+                if (solu.parse(sol))
+                {
+                    vSolu.push_back(solu);
+                }
             }
             count++;
         }
     }
+
+    int nfix = 0;
+    int nrtk = 0;
+    double sfix[3] = { 0 };
+    double srtk[3] = { 0 };
+
+    int status = solution_status(vSolu, &nfix, sfix, &nrtk, srtk);
+
+    if (fSOL)
+    {
+        fprintf(fSOL, "#stat=%i,%14.4f,%14.4f,%14.4f,%6i,%14.4f,%14.4f,%14.4f,%6i\n", status, sfix[0], sfix[1], sfix[2], nfix, srtk[0], srtk[1], srtk[2], nrtk);
+    }
+    printf("stat=%i,%14.4f,%14.4f,%14.4f,%6i,%14.4f,%14.4f,%14.4f,%6i\n", status, sfix[0], sfix[1], sfix[2], nfix, srtk[0], srtk[1], srtk[2], nrtk);
+
 
     delete brdc;
     delete base;
