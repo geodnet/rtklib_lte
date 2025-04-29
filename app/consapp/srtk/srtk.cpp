@@ -116,18 +116,21 @@ int artk_t::add_base_buf(char* buff, int nlen)
 				xyz_bas[1] = rtcm_obs->sta.pos[1];
 				xyz_bas[2] = rtcm_obs->sta.pos[2];
 			}
-			else if (ret == 2 && (sat = rtcm_nav->ephsat) > 0)
+			else if (ret == 2 && (sat = rtcm_obs->ephsat) > 0)
 			{
-				sys = satsys(sat, &prn);
-				if (sys == SYS_GLO)
+				if (nav_lock.try_lock())
 				{
-					int loc = prn - 1;
-					rtcm_nav->nav.geph[loc] = rtcm_obs->nav.geph[loc];
-				}
-				else if (sys == SYS_GPS || sys == SYS_GAL || sys == SYS_CMP || sys == SYS_QZS || sys == SYS_IRN)
-				{
-					int loc = sat + MAXSAT * rtcm_nav->ephset - 1;
-					rtcm_nav->nav.eph[loc] = rtcm_obs->nav.eph[loc];
+					sys = satsys(sat, &prn);
+					if (sys == SYS_GLO)
+					{
+						int loc = prn - 1;
+						rtcm_nav->nav.geph[loc] = rtcm_obs->nav.geph[loc];
+					}
+					else if (sys == SYS_GPS || sys == SYS_GAL || sys == SYS_CMP || sys == SYS_QZS || sys == SYS_IRN)
+					{
+						int loc = sat + MAXSAT * rtcm_obs->ephset - 1;
+						rtcm_nav->nav.eph[loc] = rtcm_obs->nav.eph[loc];
+					}
 				}
 			}
 		}
@@ -229,6 +232,7 @@ int artk_t::proc(char* gga, char *sol)
 			}
 			if (fabs(pos_bas[0]) < 0.001 || fabs(pos_bas[1]) < 0.001 || fabs(pos_bas[2]) < 0.001)
 			{
+
 			}
 			else
 			{
@@ -240,50 +244,56 @@ int artk_t::proc(char* gga, char *sol)
 			rtk->opt.outsingle = 1;
 
 			rtkpos(rtk, cur_obs, nobs, &rtcm_nav->nav);
-			double diff[3] = { rtk->sol.rr[0] - rtk->rb[0], rtk->sol.rr[1] - rtk->rb[1], rtk->sol.rr[2] - rtk->rb[2] };
-			double dif1[3] = { pos_rov[0] - pos_bas[0], pos_rov[1] - pos_bas[1], pos_rov[2] - pos_bas[2] };
-			double dxyz[3] = { diff[0] - dif1[0], diff[1] - dif1[1], diff[2] - dif1[2] };
-
-			double dist = sqrt(diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2]) / 1000.0;
-
-			double blh[3] = { 0 };
-			ecef2pos(rtk->rb, blh);
-
-			double C_en[3][3] = { 0 };
-			double lat = blh[0];
-			double lon = blh[1];
-
-			C_en[0][0] = -sin(lat) * cos(lon);
-			C_en[1][0] = -sin(lat) * sin(lon);
-			C_en[2][0] = cos(lat);
-			C_en[0][1] = -sin(lon);
-			C_en[1][1] = cos(lon);
-			C_en[2][1] = 0.0;
-			C_en[0][2] = -cos(lat) * cos(lon);
-			C_en[1][2] = -cos(lat) * sin(lon);
-			C_en[2][2] = -sin(lat);
-
-			double dned[3] = { 0 };
-
-			dned[0] = C_en[0][0] * dxyz[0] + C_en[1][0] * dxyz[1] + C_en[2][0] * dxyz[2];
-			dned[1] = C_en[0][1] * dxyz[0] + C_en[1][1] * dxyz[1] + C_en[2][1] * dxyz[2];
-			dned[2] = C_en[0][2] * dxyz[0] + C_en[1][2] * dxyz[1] + C_en[2][2] * dxyz[2];
-
-
-			if (dist < 30.0)
-			{
-				rtk->opt.modear = 3;
-			}
-			else
-			{
-				rtk->opt.modear = 0;
-			}
 
 			ret = outnmea_gga((uint8_t*)gga, &rtk->sol);
 
-			if (sol)
+			if (rtk->sol.stat == SOLQ_FIX || rtk->sol.stat == SOLQ_FLOAT)
 			{
-				sprintf(sol, "%s,%10.4f,%2i,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f,%3i,%10.3f,%10.3f\r\n", time_str(rtk->sol.time, 3), dist, rtk->sol.stat, rtk->sol.rr[0], rtk->sol.rr[1], rtk->sol.rr[2], dned[0], dned[1], dned[2], rtk->sol.ns, rtk->sol.age, rtk->sol.ratio);
+				double dxyz[3] = { rtk->sol.rr[0] - rtk->rb[0], rtk->sol.rr[1] - rtk->rb[1], rtk->sol.rr[2] - rtk->rb[2] };
+				double dist = sqrt(dxyz[0] * dxyz[0] + dxyz[1] * dxyz[1] + dxyz[2] * dxyz[2]) / 1000.0;
+
+				if (dist < 30.0) /* only turn on AMB for baseline < 30 km */
+				{
+					rtk->opt.modear = 3;
+				}
+				else
+				{
+					rtk->opt.modear = 0;
+				}
+
+				if (sol)
+				{
+					int wk = 0;
+					double ws = time2gpst(rtk->sol.time, &wk);
+
+					double blh[3] = { 0 };
+
+					ecef2pos(rtk->rb, blh);
+
+					double C_en[3][3] = { 0 };
+					double lat = blh[0];
+					double lon = blh[1];
+
+					C_en[0][0] = -sin(lat) * cos(lon);
+					C_en[1][0] = -sin(lat) * sin(lon);
+					C_en[2][0] = cos(lat);
+					C_en[0][1] = -sin(lon);
+					C_en[1][1] = cos(lon);
+					C_en[2][1] = 0.0;
+					C_en[0][2] = -cos(lat) * cos(lon);
+					C_en[1][2] = -cos(lat) * sin(lon);
+					C_en[2][2] = -sin(lat);
+
+					double dned[3] = { 0 };
+
+					/* dNED = C_en'*dXYZ */
+
+					dned[0] = C_en[0][0] * dxyz[0] + C_en[1][0] * dxyz[1] + C_en[2][0] * dxyz[2];
+					dned[1] = C_en[0][1] * dxyz[0] + C_en[1][1] * dxyz[1] + C_en[2][1] * dxyz[2];
+					dned[2] = C_en[0][2] * dxyz[0] + C_en[1][2] * dxyz[1] + C_en[2][2] * dxyz[2];
+
+					sprintf(sol, "%4i,%10.3f,%10.3f,%i,%14.4f,%14.4f,%14.4f,%14.4f,%14.4f,%14.4f,%3i,%10.3f,%10.3f\r\n", wk, ws, dist, rtk->sol.stat, rtk->rb[0], rtk->rb[1], rtk->rb[2], dned[0], dned[1], dned[2], rtk->sol.ns, rtk->sol.age, rtk->sol.ratio);
+				}
 			}
 
 			nav_lock.unlock();
