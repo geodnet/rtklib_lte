@@ -3,6 +3,7 @@
 #include <vector>
 #include <algorithm>
 #include <string>
+#include <filesystem>
 
 /* help text -----------------------------------------------------------------*/
 static const char* help[] = {
@@ -96,6 +97,23 @@ double get_epoch(int year, int mon, int day)
     int doy = day_of_year(year, mon, day);
     int tday = is_skip_year(year) ? 366 : 365;
     return year + ((double)(doy)) / tday;
+}
+
+int parse_fields(char* const buffer, char** val, char key, int maxfield)
+{
+    char* p, * q;
+    int n = 0;
+
+    /* parse fields */
+    for (p = buffer; *p && n < maxfield; p = q + 1) {
+        if (p == NULL) break;
+        if ((q = strchr(p, key)) || (q = strchr(p, '\n')) || (q = strchr(p, '\r'))) {
+            val[n++] = p; *q = '\0';
+        }
+        else break;
+    }
+    if (p) val[n++] = p;
+    return n;
 }
 
 inline bool operator==(const gtime_t& l, const gtime_t& r) {
@@ -772,6 +790,69 @@ static int read_json_file(const char* fname, std::map<std::string, coord_t>& mCo
     return ret;
 }
 
+static int read_ccsv_file(const char* fname, std::map<std::string, coord_t>& mCoords)
+{
+    int ret = 0;
+    FILE* fCCSV = fopen(fname, "r");
+    char buffer[512] = { 0 };
+    char* temp = nullptr;
+    char* val[100];
+
+    while (fCCSV && !feof(fCCSV) && fgets(buffer, sizeof(buffer), fCCSV))
+    {
+        /* Station,Date,Platform,Status,Result,Message,Rejected Epochs,Fixed Ambiguities,Sigmas(95%) North,SigmasE(95%) East,SigmasU(95%) Height,Primitive,ITRF2020,WGS84,Regional       */
+        if (strstr(buffer, "Station") && strstr(buffer, "Date")) continue;
+        if (temp = strchr(buffer, '\n')) temp[0] = '\0';
+        while (temp = strchr(buffer, ':')) temp[0] = ',';
+        while (temp = strchr(buffer, ';')) temp[0] = ',';
+        int num = parse_fields(buffer, val, ',', 100);
+        if (num < 51) continue;
+        coord_t coord;
+        double blh[3] = { 0 };
+        coord.name = std::string(val[0]);
+        coord.amb_fix_rate = atof(val[7]);
+        double sigmaN = atof(val[8]);
+        double sigmaE = atof(val[9]);
+        double sigmaU = atof(val[10]);
+        coord.coord_system_name = std::string(val[12]);
+        coord.epoch = atof(val[14]);
+        coord.xyz[0] = atof(val[16]);
+        coord.xyz[1] = atof(val[18]);
+        coord.xyz[2] = atof(val[20]);
+        ecef2pos(coord.xyz, blh);
+
+        double C_en[3][3] = { 0 };
+        double lat = blh[0];
+        double lon = blh[1];
+
+        C_en[0][0] = -sin(lat) * cos(lon);
+        C_en[1][0] = -sin(lat) * sin(lon);
+        C_en[2][0] = cos(lat);
+        C_en[0][1] = -sin(lon);
+        C_en[1][1] = cos(lon);
+        C_en[2][1] = 0.0;
+        C_en[0][2] = -cos(lat) * cos(lon);
+        C_en[1][2] = -cos(lat) * sin(lon);
+        C_en[2][2] = -sin(lat);
+
+        /* dXYZ = C_en*dNED */
+
+        /* cov(xyz) = C_en*cov(ned)*C_en' */
+        double covX = C_en[0][0] * sigmaN * sigmaN * C_en[0][0] + C_en[0][1] * sigmaE * sigmaE * C_en[0][1] + C_en[0][2] * sigmaU * sigmaU * C_en[0][2];
+        double covY = C_en[1][0] * sigmaN * sigmaN * C_en[1][0] + C_en[1][1] * sigmaE * sigmaE * C_en[1][1] + C_en[1][2] * sigmaU * sigmaU * C_en[1][2];
+        double covZ = C_en[2][0] * sigmaN * sigmaN * C_en[2][0] + C_en[2][1] * sigmaE * sigmaE * C_en[2][1] + C_en[2][2] * sigmaU * sigmaU * C_en[2][2];
+        coord.sigma95_xyz[0] = sqrt(covX);
+        coord.sigma95_xyz[1] = sqrt(covY);
+        coord.sigma95_xyz[2] = sqrt(covZ);
+        if (mCoords[coord.name].epoch == 0 || mCoords[coord.name].epoch < coord.epoch)
+        {
+            mCoords[coord.name] = coord;
+        }
+    }
+    if (fCCSV) fclose(fCCSV);
+    return ret;
+}
+
 struct solu_t
 {
     int wk;
@@ -883,7 +964,7 @@ static int solution_status(std::vector<solu_t>& solu, double *msol, int *nfix, d
 }
 
 
-static int process_log(const char* rovefname, const char* basefname, const char* brdcfname, int year, int mm, int dd, coord_t &base_coord)
+static int process_log(const char* rovefname, const char* basefname, const char* brdcfname, int year, int mm, int dd, coord_t &base_coord, int opt)
 {
     int ret = 0;
     artk_t* artk = new artk_t;
@@ -911,8 +992,8 @@ static int process_log(const char* rovefname, const char* basefname, const char*
     double* pos_base0 = pos + 9;
     double dxyz[4] = { 0 };
 
-    FILE* fGGA = set_output_file2(rovefname, basefname, ".nmea");
-    FILE* fSOL = set_output_file2(rovefname, basefname, ".csv");
+    FILE* fGGA = (opt & 1 << 1) ? NULL : set_output_file2(rovefname, basefname, ".nmea");
+    FILE* fSOL = (opt & 1 << 2) ? NULL : set_output_file2(rovefname, basefname, ".csv");
 
     std::string rove_name;
     std::string base_name;
@@ -925,7 +1006,14 @@ static int process_log(const char* rovefname, const char* basefname, const char*
 
     if (fSOL)
     {
-        fprintf(fSOL, "#time[yyy/mm/dd hh:mm:ss],baseline[km],solu_type[1=>FIX,2=>FLT],x[m],y[m],z[m],diffN[m],diffE[m],diffD[m],nsat,age[s],ratio\r\n");
+        fprintf(fSOL, "#time[wk,ws],baseline[km],solu_type[1=>FIX,2=>FLT],x[m],y[m],z[m],diffN[m],diffE[m],diffD[m],nsat,age[s],ratio\r\n");
+    }
+
+    if (base_coord.epoch > 0 && !(fabs(base_coord.xyz[0]) < 0.001 || fabs(base_coord.xyz[1]) < 0.001 || fabs(base_coord.xyz[2]) < 0.001))
+    {
+        pos_base0[0] = base_coord.xyz[0];
+        pos_base0[1] = base_coord.xyz[1];
+        pos_base0[2] = base_coord.xyz[2];
     }
 
     while (true)
@@ -1010,7 +1098,7 @@ static int process_log(const char* rovefname, const char* basefname, const char*
                 dxyz[1] = pos_base[1] - pos_base0[1];
                 dxyz[2] = pos_base[2] - pos_base0[2];
                 dxyz[3] = sqrt(dxyz[0] * dxyz[0] + dxyz[1] * dxyz[1] + dxyz[2] * dxyz[2]);
-                if (dxyz[3] > 5.0)
+                if (dxyz[3] > 10.0)
                 {
                     double blh[3] = { 0 };
                     ecef2pos(pos_base, blh);
@@ -1024,33 +1112,6 @@ static int process_log(const char* rovefname, const char* basefname, const char*
                 }
             }
         }
-#if 0
-        /* use external coordinate */
-        if (rove_name.length() > 0)
-        {
-            if (fabs(mCoords[rove_name].xyz[0]) < 0.001 || fabs(mCoords[rove_name].xyz[1]) < 0.001 || fabs(mCoords[rove_name].xyz[2]) < 0.001)
-            {
-            }
-            else
-            {
-                pos_rove[0] = mCoords[rove_name].xyz[0];
-                pos_rove[1] = mCoords[rove_name].xyz[1];
-                pos_rove[2] = mCoords[rove_name].xyz[2];
-            }
-        }
-        if (base_name.length() > 0)
-        {
-            if (fabs(mCoords[base_name].xyz[0]) < 0.001 || fabs(mCoords[base_name].xyz[1]) < 0.001 || fabs(mCoords[base_name].xyz[2]) < 0.001)
-            {
-            }
-            else
-            {
-                pos_base[0] = mCoords[base_name].xyz[0];
-                pos_base[1] = mCoords[base_name].xyz[1];
-                pos_base[2] = mCoords[base_name].xyz[2];
-            }
-        }
-#endif
         /* base and rove data ready */
         if (nsat[0] > 0 && artk->add_rove_obs(obs_rove, nsat[0], pos_rove0))
         {
@@ -1163,12 +1224,12 @@ static int process_log(const char* rovefname, const char* basefname, const char*
             if (status == 2 && amb_fix_rate > 50.0)
             {
                 if (fSOL) fprintf(fSOL, "#solu,%s,%20s,%15.6f,%7.2f,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f\n", rcv_name.c_str(), coord_name, cur_epoch, amb_fix_rate, rov_xyz[0], rov_xyz[1], rov_xyz[2], sfix_xyz[0], sfix_xyz[1], sfix_xyz[2]);
-                printf("solu=%15s,%20s,%15.6f,%7.2f,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f\n", rcv_name.c_str(), coord_name, cur_epoch, amb_fix_rate, rov_xyz[0], rov_xyz[1], rov_xyz[2], sfix_xyz[0], sfix_xyz[1], sfix_xyz[2]);
+                if (!(opt & (1 << 0))) printf("solu=%15s,%20s,%15.6f,%7.2f,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f\n", rcv_name.c_str(), coord_name, cur_epoch, amb_fix_rate, rov_xyz[0], rov_xyz[1], rov_xyz[2], sfix_xyz[0], sfix_xyz[1], sfix_xyz[2]);
             }
             else
             {
                 if (fSOL) fprintf(fSOL, "#solu,%s,%20s,%15.6f,%7.2f,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f\n", rcv_name.c_str(), coord_name, cur_epoch, amb_fix_rate, rov_xyz[0], rov_xyz[1], rov_xyz[2], srtk_xyz[0], srtk_xyz[1], srtk_xyz[2]);
-                printf("solu=%15s,%20s,%15.6f,%7.2f,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f\n", rcv_name.c_str(), coord_name, cur_epoch, amb_fix_rate, rov_xyz[0], rov_xyz[1], rov_xyz[2], srtk_xyz[0], srtk_xyz[1], srtk_xyz[2]);
+                if (!(opt & (1 << 0))) printf("solu=%15s,%20s,%15.6f,%7.2f,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f\n", rcv_name.c_str(), coord_name, cur_epoch, amb_fix_rate, rov_xyz[0], rov_xyz[1], rov_xyz[2], srtk_xyz[0], srtk_xyz[1], srtk_xyz[2]);
             }
         }
         if (fSOL)
@@ -1178,8 +1239,8 @@ static int process_log(const char* rovefname, const char* basefname, const char*
             fprintf(fSOL, "#stat=%i,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f,%6i,%10.4f,%10.4f,%10.4f,%6i\n", status, msol[0], msol[1], msol[2], sfix[0], sfix[1], sfix[2], nfix, srtk[0], srtk[1], srtk[2], nrtk);
             fprintf(fSOL, "#stat=%i,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f,%6i,%10.4f,%10.4f,%10.4f,%6i\n", status + 2, dxyz[0], dxyz[1], dxyz[2], sfix_xyz[0], sfix_xyz[1], sfix_xyz[2], nfix, srtk_xyz[0], srtk_xyz[1], srtk_xyz[2], nrtk);
         }
-        printf("#ble=%i,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f,%6i,%10.4f,%10.4f,%10.4f,%6i\n", status, msol[0], msol[1], msol[2], sfix[0], sfix[1], sfix[2], nfix, srtk[0], srtk[1], srtk[2], nrtk);
-        printf("#ble=%i,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f,%6i,%10.4f,%10.4f,%10.4f,%6i\n", status + 2, dxyz[0], dxyz[1], dxyz[2], sfix_xyz[0], sfix_xyz[1], sfix_xyz[2], nfix, srtk_xyz[0], srtk_xyz[1], srtk_xyz[2], nrtk);
+        if (!(opt & (1 << 0))) printf("#ble=%i,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f,%6i,%10.4f,%10.4f,%10.4f,%6i\n", status, msol[0], msol[1], msol[2], sfix[0], sfix[1], sfix[2], nfix, srtk[0], srtk[1], srtk[2], nrtk);
+        if (!(opt & (1 << 0))) printf("#ble=%i,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f,%6i,%10.4f,%10.4f,%10.4f,%6i\n", status + 2, dxyz[0], dxyz[1], dxyz[2], sfix_xyz[0], sfix_xyz[1], sfix_xyz[2], nfix, srtk_xyz[0], srtk_xyz[1], srtk_xyz[2], nrtk);
     }
 
     delete brdc;
@@ -1189,9 +1250,9 @@ static int process_log(const char* rovefname, const char* basefname, const char*
 
     delete artk;
 
-    printf("rove=%s\n", rovefname);
-    printf("base=%s\n", basefname);
-    printf("brdc=%s\n", brdcfname);
+    if (!(opt & (1 << 0))) printf("rove=%s\n", rovefname);
+    if (!(opt & (1 << 0))) printf("base=%s\n", basefname);
+    if (!(opt & (1 << 0))) printf("brdc=%s\n", brdcfname);
 
     if (fSOL)
     {
@@ -1202,8 +1263,6 @@ static int process_log(const char* rovefname, const char* basefname, const char*
 
     if (fSOL) fclose(fSOL);
     if (fGGA) fclose(fGGA);
-
-
 
     return ret;
 }
@@ -1222,11 +1281,13 @@ int main(int argc, char** argv)
         int yyyy = 0;
         int mm = 0;
         int dd = 0;
+        int opt = 0;
         std::string rovefname;
         std::string basefname;
         std::string brdcfname;
         std::map<std::string, coord_t> mCoords;
         std::string jsonfname;
+        std::string ccsvfname;
         char* temp = nullptr;
         for (int i = 1; i < argc; ++i)
         {
@@ -1246,9 +1307,25 @@ int main(int argc, char** argv)
                     jsonfname = std::string(temp + 1);
                     read_json_file(jsonfname.c_str(), mCoords);
                 }
+                else if (strstr(argv[i], "ccsv"))
+                {
+                    ccsvfname = std::string(temp + 1);
+                    read_ccsv_file(ccsvfname.c_str(), mCoords);
+                }
                 else if (strstr(argv[i], "brdc"))
                 {
                     brdcfname = std::string(temp + 1);
+                }
+                else if (strstr(argv[i], "opt"))
+                {
+                    int opt_bit = atoi(temp + 1);
+                    if (opt_bit >= 0 && opt_bit < 8)
+                    {
+                        /* 0 => disable screen */
+                        /* 1 => disable NMEA GGA */
+                        /* 2 => disable CSV SOL */
+                        opt |= 1 << opt_bit;
+                    }
                 }
                 else if (strstr(argv[i], "date"))
                 {
@@ -1278,7 +1355,7 @@ int main(int argc, char** argv)
             if (strstr(basefname.c_str(), pCoord->first.c_str()))
             {
                 base_coord = pCoord->second;
-                printf("base=%15s,%20s,%15.6f,%7.2f,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f\n", pCoord->first.c_str(), pCoord->second.coord_system_name.c_str(), pCoord->second.epoch, pCoord->second.amb_fix_rate, pCoord->second.xyz[0], pCoord->second.xyz[1], pCoord->second.xyz[2], pCoord->second.sigma95_xyz[0], pCoord->second.sigma95_xyz[1], pCoord->second.sigma95_xyz[2]);
+                if (!(opt & 1 << 0)) printf("base=%15s,%20s,%15.6f,%7.2f,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f\n", pCoord->first.c_str(), pCoord->second.coord_system_name.c_str(), pCoord->second.epoch, pCoord->second.amb_fix_rate, pCoord->second.xyz[0], pCoord->second.xyz[1], pCoord->second.xyz[2], pCoord->second.sigma95_xyz[0], pCoord->second.sigma95_xyz[1], pCoord->second.sigma95_xyz[2]);
                 break;
             }
         }
@@ -1287,16 +1364,16 @@ int main(int argc, char** argv)
             if (strstr(rovefname.c_str(), pCoord->first.c_str()))
             {
                 rove_coord = pCoord->second;
-                printf("rove=%15s,%20s,%15.6f,%7.2f,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f\n", pCoord->first.c_str(), pCoord->second.coord_system_name.c_str(), pCoord->second.epoch, pCoord->second.amb_fix_rate, pCoord->second.xyz[0], pCoord->second.xyz[1], pCoord->second.xyz[2], pCoord->second.sigma95_xyz[0], pCoord->second.sigma95_xyz[1], pCoord->second.sigma95_xyz[2]);
+                if (!(opt & 1 << 0)) printf("rove=%15s,%20s,%15.6f,%7.2f,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f\n", pCoord->first.c_str(), pCoord->second.coord_system_name.c_str(), pCoord->second.epoch, pCoord->second.amb_fix_rate, pCoord->second.xyz[0], pCoord->second.xyz[1], pCoord->second.xyz[2], pCoord->second.sigma95_xyz[0], pCoord->second.sigma95_xyz[1], pCoord->second.sigma95_xyz[2]);
                 break;
             }
         }
 
-        ret = process_log(rovefname.c_str(), basefname.c_str(), brdcfname.c_str(), yyyy, mm, dd, base_coord);
+        ret = process_log(rovefname.c_str(), basefname.c_str(), brdcfname.c_str(), yyyy, mm, dd, base_coord, opt);
 
         clock_t etime = clock();
         double cpu_time_used = ((double)(etime - stime)) / CLOCKS_PER_SEC;
-        printf("time=%.3f[s]\n", cpu_time_used);
+        if (!(opt & 1 << 0)) printf("time=%.3f[s]\n", cpu_time_used);
     }
     return ret;
 }
