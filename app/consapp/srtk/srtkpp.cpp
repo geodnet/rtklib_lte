@@ -2,11 +2,12 @@
 #include <map>
 #include <vector>
 #include <algorithm>
+#include <string>
 
 /* help text -----------------------------------------------------------------*/
 static const char* help[] = {
 "",
-" usage: srtkpp rove=rovefilename base=basefilename brdc=brdcfname date=yyyy/mm/dd",
+" usage: srtkpp rove=rovefilename base=basefilename brdc=brdcfname date=yyyy/mm/dd json=coordfname",
 "",
 };
 
