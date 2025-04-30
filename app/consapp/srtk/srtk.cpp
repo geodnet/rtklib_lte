@@ -131,6 +131,7 @@ int artk_t::add_base_buf(char* buff, int nlen)
 						int loc = sat + MAXSAT * rtcm_obs->ephset - 1;
 						rtcm_nav->nav.eph[loc] = rtcm_obs->nav.eph[loc];
 					}
+					nav_lock.unlock();
 				}
 			}
 		}
