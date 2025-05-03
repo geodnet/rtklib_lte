@@ -199,7 +199,7 @@ static int decode_stqraw(raw_t *raw)
         
         raw->obs.data[n].P[0]=pr1;
         raw->obs.data[n].L[0]=cp1;
-        raw->obs.data[n].D[0]=!(ind&2)?0.0:R4(p+18);
+        raw->obs.data[n].D[0]=(float)(!(ind&2)?0.0:R4(p+18));
         raw->obs.data[n].SNR[0]=(uint16_t)(U1(p+1)/SNR_UNIT+0.5);
         raw->obs.data[n].LLI[0]=0;
         raw->obs.data[n].code[0]=sys==SYS_CMP?CODE_L2I:CODE_L1C;
@@ -322,14 +322,14 @@ static int decode_stqrawx(raw_t *raw)
         if (gnss_type==2) {
             raw->nav.geph[prn-1].frq=(int)(U1(p+2)&0xF)-7;
         }
-        ind=U2(p+27);
+        ind=(uint8_t)U2(p+27);
         pr1=!(ind&1)?0.0:R8(p+ 4);
         cp1=!(ind&4)?0.0:R8(p+12);
         cp1-=floor((cp1+1E9)/2E9)*2E9; /* -10^9 < cp1 < 10^9 */
         
         raw->obs.data[n].P[0]=pr1;
         raw->obs.data[n].L[0]=cp1;
-        raw->obs.data[n].D[0]=!(ind&2)?0.0:R4(p+20);
+        raw->obs.data[n].D[0]=(float)(!(ind&2)?0.0:R4(p+20));
         raw->obs.data[n].SNR[0]=(uint16_t)(U1(p+3)/SNR_UNIT+0.5);
         raw->obs.data[n].LLI[0]=0;
         raw->obs.data[n].code[0]=sys==SYS_CMP?CODE_L2I:CODE_L1C;

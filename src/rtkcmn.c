@@ -3305,10 +3305,10 @@ extern int expath(const char *path, char *paths[], int nmax)
         strcpy(paths[0],path);
         return 1;
     }
-    sprintf(paths[n++],"%s%s",dir,file.cFileName);
+    sprintf(paths[n++],"%s%s",dir,(char*)file.cFileName);
     while (FindNextFile(h,&file)&&n<nmax) {
         if (file.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY) continue;
-        sprintf(paths[n++],"%s%s",dir,file.cFileName);
+        sprintf(paths[n++],"%s%s",dir,(char*)file.cFileName);
     }
     FindClose(h);
 #else
@@ -3365,7 +3365,7 @@ static int mkdir_r(const char *dir)
     sprintf(pdir,"%.1023s",dir);
     if ((p=strrchr(pdir,FILEPATHSEP))) {
         *p='\0';
-        h=FindFirstFile(pdir,&data);
+        h=FindFirstFile((LPCWSTR)pdir,&data);
         if (h==INVALID_HANDLE_VALUE) {
             if (!mkdir_r(pdir)) return 0;
         }

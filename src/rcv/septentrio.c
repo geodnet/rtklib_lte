@@ -279,7 +279,7 @@ static int decode_measepoch(raw_t *raw)
             if (D1!=0.0&&freq1>0.0&&freq2>0.0&&
                 (getbits(p+3,0,5)!=-16||U2(p+10)!=0)) {
                 D2=getbits(p+3,0,5)*6.5536+U2(p+10)*0.0001;
-                raw->obs.data[n].D[idx]=(float)(D1*freq2/freq1)+D2;
+                raw->obs.data[n].D[idx]=(float)((D1*freq2/freq1)+D2);
             }
             lock=U1(p+1);
             if (lock!=255) {
