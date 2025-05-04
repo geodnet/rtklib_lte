@@ -1364,7 +1364,9 @@ int main(int argc, char** argv)
             if (strstr(rovefname.c_str(), pCoord->first.c_str()))
             {
                 rove_coord = pCoord->second;
-                if (!(opt & 1 << 0)) printf("rove=%15s,%20s,%15.6f,%7.2f,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f\n", pCoord->first.c_str(), pCoord->second.coord_system_name.c_str(), pCoord->second.epoch, pCoord->second.amb_fix_rate, pCoord->second.xyz[0], pCoord->second.xyz[1], pCoord->second.xyz[2], pCoord->second.sigma95_xyz[0], pCoord->second.sigma95_xyz[1], pCoord->second.sigma95_xyz[2]);
+                double dxyz[3] = { rove_coord.xyz[0] - base_coord.xyz[0], rove_coord.xyz[1] - base_coord.xyz[1], rove_coord.xyz[2] - base_coord.xyz[2] };
+                double dist = sqrt(dxyz[0] * dxyz[0] + dxyz[1] * dxyz[1] + dxyz[2] * dxyz[2]) / 1000.0;
+                if (!(opt & 1 << 0)) printf("rove=%15s,%20s,%15.6f,%7.2f,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f,%10.4f\n", pCoord->first.c_str(), pCoord->second.coord_system_name.c_str(), pCoord->second.epoch, pCoord->second.amb_fix_rate, pCoord->second.xyz[0], pCoord->second.xyz[1], pCoord->second.xyz[2], pCoord->second.sigma95_xyz[0], pCoord->second.sigma95_xyz[1], pCoord->second.sigma95_xyz[2], dist);
                 break;
             }
         }
