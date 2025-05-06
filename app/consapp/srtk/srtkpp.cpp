@@ -963,6 +963,98 @@ static int solution_status(std::vector<solu_t>& solu, double *msol, int *nfix, d
     return ret;
 }
 
+typedef struct
+{
+    int sat;
+    int sys;
+    int prn;
+    int svh;
+    double ws;
+    double var;
+    double rs[6];
+    double dt[2];
+}svec_t;
+
+extern int comp_vec(obsd_t* obs, svec_t* vec, int n, nav_t* nav)
+{
+    int ret = 0;
+    double* rs, * dts, * var;
+    int i, * svh;
+    int wk = 0;
+    if (n > 0)
+    {
+        rs = mat(6, n); dts = mat(2, n); var = mat(1, n);
+        svh = new int[n];
+
+        /* satellite positons, velocities and clocks */
+        satposs(obs[0].time, obs, n, nav, EPHOPT_BRDC, rs, dts, var, svh);
+
+        for (i = 0; i < n; ++i)
+        {
+            memset(vec + i, 0, sizeof(svec_t));
+            vec[i].sat = obs[i].sat;
+            vec[i].sys = satsys(vec[i].sat, &vec[i].prn);
+            vec[i].ws = time2gpst(obs[i].time, &wk);
+            vec[i].svh = svh[i];
+            vec[i].var = var[i];
+            vec[i].rs[0] = rs[i * 6 + 0];
+            vec[i].rs[1] = rs[i * 6 + 1];
+            vec[i].rs[2] = rs[i * 6 + 2];
+            vec[i].rs[3] = rs[i * 6 + 3];
+            vec[i].rs[4] = rs[i * 6 + 4];
+            vec[i].rs[5] = rs[i * 6 + 5];
+            vec[i].dt[0] = dts[i * 2 + 0] * CLIGHT;
+            vec[i].dt[1] = dts[i * 2 + 1] * CLIGHT;
+            if (!vec[i].svh && (fabs(vec[i].rs[0]) < 0.001 || fabs(vec[i].rs[1]) < 0.001 || fabs(vec[i].rs[2]) < 0.001)) vec[i].svh = 255;
+        }
+
+        free(rs); free(dts); free(var);
+        delete[]svh;
+    }
+
+    return ret;
+}
+
+static int output_data(int rcv, obsd_t* obs, int n, double* pos, nav_t* nav, FILE* fOBS)
+{
+    int ret = 0;
+    int wk = 0;
+    int i = 0;
+    double ws = 0;
+    svec_t* vec = nullptr;
+
+    if (n > 0)
+    {
+        vec = new svec_t[n];
+
+        comp_vec(obs, vec, n, nav);
+
+        if (fOBS)
+        {
+            ws = time2gpst(obs[0].time, &wk);
+            fprintf(fOBS, "POS,%04i,%10.4f,%i,%14.4f,%14.4f,%14.4f\r\n", wk, ws, rcv, pos[0], pos[1], pos[2]);
+            for (i = 0; i < n; ++i)
+            {
+                ws = time2gpst(obs[i].time, &wk);
+                for (int f = 0; f < NFREQ + NEXOBS; ++f)
+                {
+                    if (obs[i].code[f] == 0) continue;
+                    fprintf(fOBS, "OBS,%04i,%10.4f,%i,%3i,%3i,%14.4f,%14.4f,%10.4f,%3i,%lf\r\n", wk, ws, rcv, obs[i].sat, obs[i].code[f], obs[i].P[f], obs[i].L[f], obs[i].D[f], (int)(obs[i].SNR[f] * SNR_UNIT), sat2freq(obs[i].sat, obs[i].code[f], nav));
+                }
+            }
+            for (i = 0; i < n; ++i)
+            {
+                ws = time2gpst(obs[i].time, &wk);
+                int prn = 0;
+                int sys = satsys(vec[i].sat, &prn);
+                fprintf(fOBS, "VEC,%04i,%10.4f,%i,%3i,%3i,%3i,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f,%14.4f,%10.4f,%10.4f,%i\r\n", wk, ws, rcv, vec[i].sat, sys, prn, vec[i].rs[0], vec[i].rs[1], vec[i].rs[2], vec[i].rs[3], vec[i].rs[4], vec[i].rs[5], vec[i].dt[0], vec[i].dt[1], vec[i].var, vec[i].svh);
+            }
+        }
+
+        delete[] vec;
+    }
+    return ret;
+}
 
 static int process_log(const char* rovefname, const char* basefname, const char* brdcfname, int year, int mm, int dd, coord_t &base_coord, int opt)
 {
@@ -994,6 +1086,7 @@ static int process_log(const char* rovefname, const char* basefname, const char*
 
     FILE* fGGA = (opt & 1 << 1) ? NULL : set_output_file2(rovefname, basefname, ".nmea");
     FILE* fSOL = (opt & 1 << 2) ? NULL : set_output_file2(rovefname, basefname, ".csv");
+    FILE* fOBS = (opt & 1 << 2) ? NULL : set_output_file2(rovefname, basefname, ".obs");
 
     std::string rove_name;
     std::string base_name;
@@ -1027,7 +1120,7 @@ static int process_log(const char* rovefname, const char* basefname, const char*
             ecef2pos(pos_rove, blh);
             if (fSOL)
             {
-                fprintf(fSOL, "#rove rtcm coordinate initial %s %14.9f %14.9f %14.4f %14.4f %14.4f %14.4f\r\n", time_str(obs_rove[0].time, 3), blh[0] * R2D, blh[1] * R2D, blh[2], pos_rove0[0], pos_rove0[1], pos_rove0[2]);
+                fprintf(fSOL, "#rove coordinate rtcm initial %s %14.9f %14.9f %14.4f %14.4f %14.4f %14.4f\r\n", time_str(obs_rove[0].time, 3), blh[0] * R2D, blh[1] * R2D, blh[2], pos_rove0[0], pos_rove0[1], pos_rove0[2]);
             }
         }
         else
@@ -1122,6 +1215,10 @@ static int process_log(const char* rovefname, const char* basefname, const char*
         {
             brdc->get_brdc_data(obs_rove[0].time, &rove->rtcm->nav);
             artk->add_brdc(&rove->rtcm->nav);
+            /* output to file */
+            output_data(1, obs_rove, nsat[0], pos_rove0, &rove->rtcm->nav, fOBS);
+            output_data(2, obs_base, nsat[1], pos_base0, &rove->rtcm->nav, fOBS);
+            /* call RTK engine */
             if (nsat[1] > 0 && artk->add_base_obs(obs_base, nsat[1], pos_base0))
             {
 
@@ -1268,6 +1365,7 @@ static int process_log(const char* rovefname, const char* basefname, const char*
 
     if (fSOL) fclose(fSOL);
     if (fGGA) fclose(fGGA);
+    if (fOBS) fclose(fOBS);
 
     return ret;
 }
