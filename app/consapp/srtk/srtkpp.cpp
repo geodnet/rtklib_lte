@@ -1,4 +1,4 @@
-#include "srtk.h"
+#include "artk.h"
 #include <map>
 #include <vector>
 #include <algorithm>
@@ -1009,13 +1009,6 @@ static int process_log(const char* rovefname, const char* basefname, const char*
         fprintf(fSOL, "#time[wk,ws],baseline[km],solu_type[1=>FIX,2=>FLT],x[m],y[m],z[m],diffN[m],diffE[m],diffD[m],nsat,age[s],ratio\r\n");
     }
 
-    if (base_coord.epoch > 0 && !(fabs(base_coord.xyz[0]) < 0.001 || fabs(base_coord.xyz[1]) < 0.001 || fabs(base_coord.xyz[2]) < 0.001))
-    {
-        pos_base0[0] = base_coord.xyz[0];
-        pos_base0[1] = base_coord.xyz[1];
-        pos_base0[2] = base_coord.xyz[2];
-    }
-
     while (true)
     {
         nsat[0] = rove->get_obs(obs_rove, pos_rove);
@@ -1050,7 +1043,7 @@ static int process_log(const char* rovefname, const char* basefname, const char*
                 ecef2pos(pos_rove, blh);
                 if (fSOL)
                 {
-                    fprintf(fSOL, "#rove rtcm coordinate changed %s %14.9f %14.9f %14.4f %14.4f %14.4f %14.4f %14.4f %14.4f %14.4f %14.4f\r\n", time_str(obs_rove[0].time, 3), blh[0]*R2D, blh[1]*R2D, blh[2], pos_rove0[0], pos_rove0[1], pos_rove0[2], dxyz[0], dxyz[1], dxyz[2], dxyz[3]);
+                    fprintf(fSOL, "#rove coordinate rtcm changed %s %14.9f %14.9f %14.4f %14.4f %14.4f %14.4f %14.4f %14.4f %14.4f %14.4f\r\n", time_str(obs_rove[0].time, 3), blh[0]*R2D, blh[1]*R2D, blh[2], pos_rove0[0], pos_rove0[1], pos_rove0[2], dxyz[0], dxyz[1], dxyz[2], dxyz[3]);
                 }
                 pos_rove0[0] = pos_rove[0];
                 pos_rove0[1] = pos_rove[1];
@@ -1085,11 +1078,23 @@ static int process_log(const char* rovefname, const char* basefname, const char*
                 ecef2pos(pos_base, blh);
                 if (fSOL)
                 {
-                    fprintf(fSOL, "#base rtcm coordinate initial %s %14.9f %14.9f %14.4f %14.4f %14.4f %14.4f\r\n", time_str(obs_rove[0].time, 3), blh[0] * R2D, blh[1] * R2D, blh[2], pos_base0[0], pos_base0[1], pos_base0[2]);
+                    fprintf(fSOL, "#base coordinate rtcm initial %s %14.9f %14.9f %14.4f %14.4f %14.4f %14.4f\r\n", time_str(obs_base[0].time, 3), blh[0] * R2D, blh[1] * R2D, blh[2], pos_base0[0], pos_base0[1], pos_base0[2]);
                 }
-                pos_base0[0] = pos_base[0];
-                pos_base0[1] = pos_base[1];
-                pos_base0[2] = pos_base[2];
+                if (base_coord.epoch > 0 && !(fabs(base_coord.xyz[0]) < 0.001 || fabs(base_coord.xyz[1]) < 0.001 || fabs(base_coord.xyz[2]) < 0.001))
+                {
+                    dxyz[0] = base_coord.xyz[0] - pos_base0[0];
+                    dxyz[1] = base_coord.xyz[1] - pos_base0[1];
+                    dxyz[2] = base_coord.xyz[2] - pos_base0[2];
+                    dxyz[3] = sqrt(dxyz[0] * dxyz[0] + dxyz[1] * dxyz[1] + dxyz[2] * dxyz[2]);
+                    ecef2pos(base_coord.xyz, blh);
+                    if (fSOL) fprintf(fSOL, "#base coordinate external     %s %14.9f %14.9f %14.4f %14.4f %14.4f %14.4f %14.4f\r\n", time_str(obs_base[0].time, 3), blh[0] * R2D, blh[1] * R2D, blh[2], base_coord.xyz[0], base_coord.xyz[1], base_coord.xyz[2], dxyz[3]);
+                    if (dxyz[3] < 20.0)
+                    {
+                        pos_base0[0] = base_coord.xyz[0];
+                        pos_base0[1] = base_coord.xyz[1];
+                        pos_base0[2] = base_coord.xyz[2];
+                    }
+                }
             }
             else
             {

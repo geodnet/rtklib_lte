@@ -161,10 +161,10 @@
     <ClCompile Include="..\..\..\src\solution.c" />
     <ClCompile Include="..\..\..\src\tides.c" />
     <ClCompile Include="srtkpp.cpp" />
-    <ClCompile Include="srtk.cpp" />
+    <ClCompile Include="artk.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="srtk.h" />
+    <ClInclude Include="artk.h" />
     <ClInclude Include="..\..\..\src\rtklib.h" />
   </ItemGroup>
   <ItemGroup>
