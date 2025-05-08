@@ -425,25 +425,32 @@ struct station_t
             char buffer[1200] = { 0 };
             char* temp = nullptr;
             char* val[100];
-            while (fLOG && !feof(fLOG)&& (rtcm->nbyte>0 || fgets((char*)rtcm->buff, sizeof(rtcm->buff), fLOG)))
+            while (fLOG && !feof(fLOG) && (rtcm->nbyte > 0 || fgets((char*)rtcm->buff, sizeof(rtcm->buff), fLOG)))
             {
                 memcpy(buffer, rtcm->buff, sizeof(rtcm->buff));
+                rtcm->nbyte = 0;
                 temp = strchr(buffer, '#'); if (temp) temp[0] = '\0';
                 if (strlen(buffer) < 1) continue;
                 int num = parse_fields(buffer, val, ',', 100);
                 if (num < 1) continue;
-                if (strstr(val[0], "Fix"))
+                if (strstr(val[0], "Fix")&& num > 4)
                 {
-/*
-# Fix,Provider,LatitudeDegrees,LongitudeDegrees,AltitudeMeters,SpeedMps,AccuracyMeters,BearingDegrees,UnixTimeMillis,SpeedAccuracyMps,BearingAccuracyDegrees,elapsedRealtimeNanos,VerticalAccuracyMeters,MockLocation,NumberOfUsedSignals,VerticalSpeedAccuracyMps,SolutionType
-*/
+                    /*
+                    # Fix,Provider,LatitudeDegrees,LongitudeDegrees,AltitudeMeters,SpeedMps,AccuracyMeters,BearingDegrees,UnixTimeMillis,SpeedAccuracyMps,BearingAccuracyDegrees,elapsedRealtimeNanos,VerticalAccuracyMeters,MockLocation,NumberOfUsedSignals,VerticalSpeedAccuracyMps,SolutionType
+                    */
                     double blh[3] = { 0 };
                     blh[0] = atof(val[2]) * D2R;
                     blh[1] = atof(val[3]) * D2R;
                     blh[2] = atof(val[4]);
-                    pos2ecef(blh, rtcm->sta.pos);
+                    if (fabs(blh[0]) < 1e-7 && fabs(blh[1]) < 1e-7 && fabs(blh[2]) < 1e-3)
+                    {
+                    }
+                    else
+                    {
+                        pos2ecef(blh, rtcm->sta.pos);
+                    }
                 }
-                else if (strstr(val[0], "Raw"))
+                else if (strstr(val[0], "Raw") && num > 37)
                 {
 /*
 # Raw,utcTimeMillis,TimeNanos,LeapSecond,TimeUncertaintyNanos,FullBiasNanos,BiasNanos,BiasUncertaintyNanos,DriftNanosPerSecond,DriftUncertaintyNanosPerSecond,HardwareClockDiscontinuityCount,Svid,TimeOffsetNanos,State,ReceivedSvTimeNanos,ReceivedSvTimeUncertaintyNanos,Cn0DbHz,PseudorangeRateMetersPerSecond,PseudorangeRateUncertaintyMetersPerSecond,AccumulatedDeltaRangeState,AccumulatedDeltaRangeMeters,AccumulatedDeltaRangeUncertaintyMeters,CarrierFrequencyHz,CarrierCycles,CarrierPhase,CarrierPhaseUncertainty,MultipathIndicator,SnrInDb,ConstellationType,AgcDb,BasebandCn0DbHz,FullInterSignalBiasNanos,FullInterSignalBiasUncertaintyNanos,SatelliteInterSignalBiasNanos,SatelliteInterSignalBiasUncertaintyNanos,CodeType,ChipsetElapsedRealtimeNanos,IsFullTracking
@@ -456,13 +463,6 @@ struct station_t
                     double FullBiasNanos = atof(val[5]);
                     double BiasNanos = atof(val[6]);
 
-                    /* # Compute the GPS week number and reception time (i.e. clock epoch) */
-                    int gpsweek = floor(-FullBiasNanos * 1.0e-9 / 604800);
-                    double local_est_GPS_time = TimeNanos - (FullBiasNanos + BiasNanos);
-                    double gpssow = local_est_GPS_time * 1.0e-9 - gpsweek * 604800;
-                    /* # Fractional part of the integer seconds */
-                    double frac = gpssow - int(gpssow + 0.5);
-
                     double BiasUncertaintyNanos = atof(val[7]);
                     double DriftNanosPerSecond = atof(val[8]);
                     double DriftUncertaintyNanosPerSecond = atof(val[9]);
@@ -470,62 +470,23 @@ struct station_t
                     int Svid = atoi(val[11]);
                     double TimeOffsetNanos = atof(val[12]);
 
-                    /* # Compute the reception times */
-                    double tRxSeconds = gpssow - TimeOffsetNanos * 1.0e-9;
-
-                    int State = atof(val[13]);
+                    int State = atoi(val[13]);
                     double ReceivedSvTimeNanos = atof(val[14]);
                     double ReceivedSvTimeUncertaintyNanos = atof(val[15]);
                     double Cn0DbHz = atof(val[16]);
                     double PseudorangeRateMetersPerSecond = atof(val[17]);
                     double PseudorangeRateUncertaintyMetersPerSecond = atof(val[18]);
-                    int AccumulatedDeltaRangeState = atof(val[19]);
+                    int AccumulatedDeltaRangeState = atoi(val[19]);
                     double AccumulatedDeltaRangeMeters = atof(val[20]);
                     double AccumulatedDeltaRangeUncertaintyMeters = atof(val[21]);
                     double CarrierFrequencyHz = atof(val[22]);  /* frequency 1575420030.0 L1 1600875010.0 G1 1176450050.0 L5 1561097980.0 B1I */
-
-                    /* # Compute wavelength for metric conversion in cycles */
-                    double wavelength = CLIGHT / CarrierFrequencyHz;
 
                     double CarrierCycles = atof(val[23]);
                     double CarrierPhase = atof(val[24]);
                     double CarrierPhaseUncertainty = atof(val[25]);
                     double MultipathIndicator = atof(val[26]);
                     double SnrInDb = atof(val[27]);
-                    int ConstellationType = atof(val[28]);  /* 1 GPS, 2 SBS, 3 GLO, 4 QZS, 5 BDS, 6 GAL  */
-
-                    /* # Compute transmit time (depends on constellation of origin) */
-                    double tTxSeconds = ReceivedSvTimeNanos * 1.0e-9;
-                    if (ConstellationType == 3)
-                    {
-                        int wday = (int)floor(tRxSeconds / (3600.0 * 24));
-                        tTxSeconds += wday * (3600.0 * 24.0) - 3 * 3600 + 18.0; /* conver to GPS time */
-                    }
-                    else if (ConstellationType == 5)
-                    {
-                        tTxSeconds += 14.0;
-                    }
-                    double tau = tRxSeconds - tTxSeconds;
-                    if (tau > (24 * 7 * 1800)) tau -= 24 * 7 * 3600;
-                    else if (tau < -(24 * 7 * 1800)) tau += 24 * 7 * 3600;
-
-                    double dt = (tRxSeconds * 1e7 - floor(tRxSeconds * 1e7)) * 1.0e-7;
-                    double range = tau * CLIGHT;
-
-                    double dist = dt * CLIGHT;
-                    frac = dt;
-                    range -= frac * PseudorangeRateMetersPerSecond;
-
-                    double diff = (20989661.959 - range);
-                    dt = diff / CLIGHT;
-
-                    range -= frac * PseudorangeRateMetersPerSecond;
-
-                    double phase = AccumulatedDeltaRangeMeters / wavelength;
-
-                    double doppler = -PseudorangeRateMetersPerSecond / wavelength;
-
-                    double snr = Cn0DbHz;
+                    int ConstellationType = atoi(val[28]);  /* 1 GPS, 2 SBS, 3 GLO, 4 QZS, 5 BDS, 6 GAL  */
 
                     double AgcDb = atof(val[29]);
                     double BasebandCn0DbHz = atof(val[30]);
@@ -533,33 +494,171 @@ struct station_t
                     double FullInterSignalBiasUncertaintyNanos = atof(val[32]);
                     double SatelliteInterSignalBiasNanos = atof(val[33]);
                     double SatelliteInterSignalBiasUncertaintyNanos = atof(val[34]);
-                    int CodeType = atof(val[35]); /* 1C default, STATE_GAL_E1B_PAGE_SYNC => 1B for GAL, 5Q for GPS, QZS, GAL, 2I for BDS B1I,  */
+                    int CodeType = atoi(val[35]); /* 1C default, STATE_GAL_E1B_PAGE_SYNC => 1B for GAL, 5Q for GPS, QZS, GAL, 2I for BDS B1I,  */
                     double ChipsetElapsedRealtimeNanos = atof(val[36]);
                     double IsFullTracking = atof(val[37]);
 
-                    gpssow -= frac;
+                    /* # Compute the GPS week number and reception time (i.e. clock epoch) */
+                    int wk = (int)floor(-FullBiasNanos * 1.0e-9 / 604800);
+                    double ws = (TimeNanos - (FullBiasNanos + BiasNanos)) * 1.0e-9 - wk * 604800;
+                    /* # Fractional part of the integer seconds */
+                    double frac = ws - int(ws + 0.5);
 
-                    gpssow = gpssow;
+                    /* # Compute the reception times */
+                    double trx = ws - TimeOffsetNanos * 1.0e-9;
 
-                    //gtime_t obs_time = { 0 };
-                    //obs_time.time = (time_t)
-                    //if (rtcm->obs.n > 0)
+                    /* # Compute transmit time (depends on constellation of origin) */
+                    double ttx = ReceivedSvTimeNanos * 1.0e-9;
+
+                    /* # Compute wavelength for metric conversion in cycles */
+                    double wavelength = CLIGHT / CarrierFrequencyHz;
+
+#if 0
+                    int ifreq_all[] = {
+                        FREQ1 / (10.23e6),            /* 1.57542E9  L1/E1/B1C  frequency (Hz) */
+                        FREQ2 / (10.23e6),            /* 1.22760E9  L2         frequency (Hz) */
+                        FREQ5 / (10.23e6),            /* 1.17645E9  L5/E5a/B2a frequency (Hz) */
+                        FREQ6 / (10.23e6),            /* 1.27875E9  E6/L6  frequency (Hz) */
+                        FREQ7 / (10.23e6),            /* 1.20714E9  E5b    frequency (Hz) */
+                        FREQ8 / (10.23e6),            /* 1.191795E9 E5a+b  frequency (Hz) */
+                        FREQ9 / (10.23e6),            /* 2.492028E9 S      frequency (Hz) */
+                        FREQ1a_GLO / (10.23e6),       /* 1.600995E9 GLONASS G1a frequency (Hz) */
+                        FREQ2a_GLO / (10.23e6),       /* 1.248060E9 GLONASS G2a frequency (Hz) */
+                        FREQ1_CMP / (10.23e6),        /* 1.561098E9 BDS B1I     frequency (Hz) */
+                        FREQ2_CMP / (10.23e6),        /* 1.20714E9  BDS B2I/B2b frequency (Hz) */
+                        FREQ3_CMP / (10.23e6),        /* 1.26852E9  BDS B3      frequency (Hz) */
+                        FREQ1_GLO / (10.23e6),        /* 1.60200E9  GLONASS G1 base frequency (Hz) */
+                        FREQ2_GLO / (10.23e6),        /* 1.24600E9  GLONASS G2 base frequency (Hz) */
+                    };
+#endif
+
+                    int sys = 0;
+                    int prn = Svid;
+                    int sat = 0;
+                    int code = 0;
+                    int f = 0;
+                    int ifreq = (int)(CarrierFrequencyHz / (10.23e6));
+                    if (ConstellationType == 1)
                     {
-                        //obsd_t* obs_pre = rtcm->obs.data + (rtcm->obs.n - 1);
-                        //if (obs_pre->time)
+                        sys = SYS_GPS;
+                        if (ifreq == 154)
+                            code = CODE_L1C;
+                        else if (ifreq == 115)
+                            code = CODE_L5Q;
                     }
-                }
-                if (ret == 1)
-                {
-                    for (int i = 0; i < rtcm->obs.n; ++i)
+                    else if (ConstellationType == 2)
                     {
-                        obs[nsat] = rtcm->obs.data[i];
-                        ++nsat;
+                        sys = SYS_SBS;
                     }
-                    pos[0] = rtcm->sta.pos[0];
-                    pos[1] = rtcm->sta.pos[1];
-                    pos[2] = rtcm->sta.pos[2];
-                    break;
+                    else if (ConstellationType == 3)
+                    {
+                        sys = SYS_GLO;
+                        if (ifreq >= 154)
+                            code = CODE_L1C;
+                        int wday = (int)floor(trx / (3600.0 * 24) + 0.5);
+                        ttx += wday * (3600.0 * 24.0) - 3 * 3600 + 18.0; /* conver to GPS time */
+                    }
+                    else if (ConstellationType == 4)
+                    {
+                        sys = SYS_QZS;
+                        if (ifreq == 154)
+                            code = CODE_L1C;
+                        else if (ifreq == 115)
+                            code = CODE_L5Q;
+                    }
+                    else if (ConstellationType == 5)
+                    {
+                        sys = SYS_CMP;
+                        ttx += 14.0;
+                        code = CODE_L2I;
+                    }
+                    else if (ConstellationType == 6)
+                    {
+                        sys = SYS_GAL;
+                        if (ifreq == 154)
+                            code = CODE_L1C;
+                        else if (ifreq == 115)
+                            code = CODE_L5Q;
+                    }
+                    else
+                    {
+
+                    }
+
+                    printf("%4i,%15.9f,%3i,%3i,%3i,%3i", wk, ws, ifreq, sys, prn, code);
+
+                    if (sys > 0 && (sat = satno(sys, prn)) > 0 && (f = code2idx(sys, code)) >= 0 && f < (NFREQ + NEXOBS))
+                    {
+
+                        double tau = trx - ttx;
+                        if (tau > (24 * 7 * 1800)) tau -= 24 * 7 * 3600;
+                        else if (tau < -(24 * 7 * 1800)) tau += 24 * 7 * 3600;
+
+                        //double dt = (tRxSeconds * 1e7 - floor(tRxSeconds * 1e7)) * 1.0e-7; /* it seems that the rinex from GNSSLogger directly compensate the dist caused by the round of 1.0e-7s */
+                        //double dist = dt * CLIGHT;
+                        double range = tau * CLIGHT;
+                        //range += dist; /* match the rinex output */
+
+                        //range -= frac * PseudorangeRateMetersPerSecond;
+
+                        double phase = AccumulatedDeltaRangeMeters / wavelength;
+
+                        double doppler = -PseudorangeRateMetersPerSecond / wavelength;
+
+                        double snr = Cn0DbHz;
+
+                        //ws -= frac;
+
+                        gtime_t obs_time = gpst2time(wk, ws);
+
+                        obsd_t cur_obs = { 0 };
+                        cur_obs.time = obs_time;
+                        cur_obs.sat = satno(sys, prn);
+                        cur_obs.code[f] = code;
+                        cur_obs.P[f] = range;
+                        cur_obs.L[f] = phase;
+                        cur_obs.D[f] = (float)doppler;
+                        cur_obs.SNR[f] = (uint16_t)(snr / SNR_UNIT);
+
+                        printf(",%14.4f,%14.4f,%10.4f,%7.3f\n", range, phase, doppler, snr);
+
+                        if (rtcm->obs.n > 0)
+                        {
+                            obsd_t* obs_pre = rtcm->obs.data + (rtcm->obs.n - 1);
+                            double dt1 = timediff(obs_time, obs_pre->time);
+                            if (fabs(dt1) < 0.001) /* same epoch */
+                            {
+                                if (rtcm->obs.n < MAXOBS)
+                                {
+                                    rtcm->obs.data[rtcm->obs.n++] = cur_obs;
+                                }
+                            }
+                            else
+                            {
+                                rtcm->nbyte = (int)strlen((char*)rtcm->buff);
+                                /* new epoch, store the current buffer */
+                                ret = 1;
+                                for (int i = 0; i < rtcm->obs.n; ++i)
+                                {
+                                    obs[nsat] = rtcm->obs.data[i];
+                                    ++nsat;
+                                }
+                                pos[0] = rtcm->sta.pos[0];
+                                pos[1] = rtcm->sta.pos[1];
+                                pos[2] = rtcm->sta.pos[2];
+                                rtcm->obs.n = 0;
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            rtcm->obs.data[rtcm->obs.n++] = cur_obs;
+                        }
+                    }
+                    else
+                    {
+                        printf("\n");
+                    }
                 }
             }
         }
