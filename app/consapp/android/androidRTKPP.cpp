@@ -235,120 +235,52 @@ struct brdc_t
         double dt1 = 0;
         int is_new = 0;
         /* */
-        for (std::map<int, std::vector< eph_t>>::iterator pSatEph = mSatEph.begin(); pSatEph != mSatEph.end(); ++pSatEph)
+        for (std::map<int, std::vector<eph_t>>::iterator pSatEph = mSatEph.begin(); pSatEph != mSatEph.end(); ++pSatEph)
         {
-            if (nav->eph[pSatEph->first].sat > 0)
+            eph_t bestEph = nav->eph[pSatEph->first];
+            for (std::vector<eph_t>::iterator pEph = pSatEph->second.begin(); pEph != pSatEph->second.end(); ++pEph)
             {
-                dt0 = fabs(timediff(nav->eph[pSatEph->first].toe, time));
-            }
-            else
-            {
-                dt0 = 24 * 3600.0;
-            }
-            std::vector<eph_t>::iterator pEph = std::lower_bound(pSatEph->second.begin(), pSatEph->second.end(), time);
-            if (pEph != pSatEph->second.end())
-            {
-                is_new = 0;
-                if ((dt1 = fabs(timediff(pEph->toe, time))) < dt0)
+                dt1 = fabs(timediff(pEph->toe, time));
+                if (bestEph.sat > 0)
                 {
-                    dt0 = dt1;
-                    nav->eph[pSatEph->first] = *pEph;
-                    is_new++;
-                }
-                if (pEph != pSatEph->second.begin())
-                {
-                    dt1 = fabs(timediff((pEph - 1)->toe, time));
+                    dt0 = fabs(timediff(bestEph.toe, time));
                     if (dt1 < dt0)
                     {
-                        dt0 = dt1;
-                        nav->eph[pSatEph->first] = *(pEph - 1);
-                        is_new++;
+                        bestEph = *pEph;
                     }
                 }
-                if ((pEph + 1) != pSatEph->second.end())
+                else
                 {
-                    dt1 = fabs(timediff((pEph + 1)->toe, time));
-                    if (dt1 < dt0)
-                    {
-                        dt0 = dt1;
-                        nav->eph[pSatEph->first] = *(pEph - 1);
-                        is_new++;
-                    }
+                    bestEph = *pEph;
                 }
-                if (is_new) ++ret;
             }
-            else if (pSatEph->second.size() > 0)
+            if (bestEph.sat > 0)
             {
-                --pEph;
-                if (pEph != pSatEph->second.end())
-                {
-                    is_new = 0;
-                    if ((dt1 = fabs(timediff(pEph->toe, time))) < dt0)
-                    {
-                        dt0 = dt1;
-                        nav->eph[pSatEph->first] = *pEph;
-                        is_new++;
-                    }
-                    if (is_new) ++ret;
-                }
+                nav->eph[pSatEph->first] = bestEph;
             }
         }
         for (std::map<int, std::vector<geph_t>>::iterator pSatEph = mGloEph.begin(); pSatEph != mGloEph.end(); ++pSatEph)
         {
-            if (nav->geph[pSatEph->first].sat > 0)
+            geph_t bestEph = nav->geph[pSatEph->first];
+            for (std::vector<geph_t>::iterator pEph = pSatEph->second.begin(); pEph != pSatEph->second.end(); ++pEph)
             {
-                dt0 = fabs(timediff(nav->geph[pSatEph->first].toe, time));
-            }
-            else
-            {
-                dt0 = 24 * 3600.0;
-            }
-            std::vector<geph_t>::iterator pEph = std::lower_bound(pSatEph->second.begin(), pSatEph->second.end(), time);
-            if (pEph != pSatEph->second.end())
-            {
-                is_new = 0;
-                if ((dt1 = fabs(timediff(pEph->toe, time))) < dt0)
+                dt1 = fabs(timediff(pEph->toe, time));
+                if (bestEph.sat > 0)
                 {
-                    dt0 = dt1;
-                    nav->geph[pSatEph->first] = *pEph;
-                    is_new++;
-                }
-                if (pEph != pSatEph->second.begin())
-                {
-                    dt1 = fabs(timediff((pEph - 1)->toe, time));
+                    dt0 = fabs(timediff(bestEph.toe, time));
                     if (dt1 < dt0)
                     {
-                        dt0 = dt1;
-                        nav->geph[pSatEph->first] = *(pEph - 1);
-                        is_new++;
+                        bestEph = *pEph;
                     }
                 }
-                if ((pEph + 1) != pSatEph->second.end())
+                else
                 {
-                    dt1 = fabs(timediff((pEph + 1)->toe, time));
-                    if (dt1 < dt0)
-                    {
-                        dt0 = dt1;
-                        nav->geph[pSatEph->first] = *(pEph - 1);
-                        is_new++;
-                    }
+                    bestEph = *pEph;
                 }
-                if (is_new) ++ret;
             }
-            else if (pSatEph->second.size() > 0)
+            if (bestEph.sat > 0)
             {
-                --pEph;
-                if (pEph != pSatEph->second.end())
-                {
-                    is_new = 0;
-                    if ((dt1 = fabs(timediff(pEph->toe, time))) < dt0)
-                    {
-                        dt0 = dt1;
-                        nav->geph[pSatEph->first] = *pEph;
-                        is_new++;
-                    }
-                    if (is_new) ++ret;
-                }
+                nav->geph[pSatEph->first] = bestEph;
             }
         }
         return 1;
@@ -357,11 +289,13 @@ struct brdc_t
 
 #define RTCM_FILE 0
 #define ANDROID_PHONE 1
+#define RINEX 2
 
 struct station_t
 {
     FILE* fLOG;
     rtcm_t* rtcm;
+    rnxctr_t* rinex = new rnxctr_t;
     int format_;
     station_t()
     {
@@ -369,6 +303,8 @@ struct station_t
         rtcm = new rtcm_t;
         init_rtcm(rtcm);
         format_ = RTCM_FILE;
+        rinex = new rnxctr_t;
+        init_rnxctr(rinex);
     }
     int open(const char* fname, int year, int mon, int day, int format)
     {
@@ -387,6 +323,14 @@ struct station_t
         {
             fLOG = fname ? fopen(fname, "r") : NULL;
         }
+        else if (format == RINEX)
+        {
+            fLOG = fname ? fopen(fname, "r") : NULL;
+            if (fLOG && open_rnxctr(rinex, fLOG))
+            {
+
+            }
+        }
         format_ = format;
         return fLOG != NULL;
     }
@@ -395,6 +339,8 @@ struct station_t
         if (fLOG) fclose(fLOG);
         free_rtcm(rtcm);
         delete rtcm;
+        free_rnxctr(rinex);
+        delete rinex;
     }
     int get_obs(obsd_t* obs, double* pos)
     {
@@ -555,8 +501,9 @@ struct station_t
                         sys = SYS_GLO;
                         if (ifreq >= 154)
                             code = CODE_L1C;
-                        int wday = (int)floor(trx / (3600.0 * 24) + 0.5);
-                        ttx += wday * (3600.0 * 24.0) - 3 * 3600 + 18.0; /* conver to GPS time */
+                        ttx += - 3 * 3600 + 18.0; /* conver to GPS time */
+                        int wday = (int)floor((trx - ttx) / (3600.0 * 24) + 0.5);
+                        ttx += wday * (3600.0 * 24.0);
                     }
                     else if (ConstellationType == 4)
                     {
@@ -585,8 +532,10 @@ struct station_t
 
                     }
 
-                    printf("%4i,%15.9f,%3i,%3i,%3i,%3i", wk, ws, ifreq, sys, prn, code);
-
+                    gtime_t obs_time = gpst2time(wk, ws);
+#ifdef _DEBUG
+                    printf("%s,%4i,%20.12f,%3i,%3i,%3i,%3i", time_str(obs_time,3), wk, ws, ifreq, sys, prn, code);
+#endif
                     if (sys > 0 && (sat = satno(sys, prn)) > 0 && (f = code2idx(sys, code)) >= 0 && f < (NFREQ + NEXOBS))
                     {
 
@@ -609,7 +558,6 @@ struct station_t
 
                         //ws -= frac;
 
-                        gtime_t obs_time = gpst2time(wk, ws);
 
                         obsd_t cur_obs = { 0 };
                         cur_obs.time = obs_time;
@@ -619,9 +567,9 @@ struct station_t
                         cur_obs.L[f] = phase;
                         cur_obs.D[f] = (float)doppler;
                         cur_obs.SNR[f] = (uint16_t)(snr / SNR_UNIT);
-
+#ifdef _DEBUG
                         printf(",%14.4f,%14.4f,%10.4f,%7.3f\n", range, phase, doppler, snr);
-
+#endif
                         if (rtcm->obs.n > 0)
                         {
                             obsd_t* obs_pre = rtcm->obs.data + (rtcm->obs.n - 1);
@@ -657,8 +605,30 @@ struct station_t
                     }
                     else
                     {
+#ifdef _DEBUG
                         printf("\n");
+#endif
                     }
+                }
+            }
+        }
+        else if (format_ == RINEX)
+        {
+            while (fLOG && !feof(fLOG))
+            {
+                ret = input_rnxctr(rinex, fLOG);
+                if (ret < 0) break; /* end of file */
+                if (ret == 1)
+                {
+                    for (int i = 0; i < rinex->obs.n; ++i)
+                    {
+                        obs[nsat] = rinex->obs.data[i];
+                        ++nsat;
+                    }
+                    pos[0] = rinex->sta.pos[0];
+                    pos[1] = rinex->sta.pos[1];
+                    pos[2] = rinex->sta.pos[2];
+                    break;
                 }
             }
         }
@@ -997,12 +967,12 @@ static int read_json_file(const char* fname, std::map<std::string, coord_t>& mCo
                 /* add */
                 coord_t coord;
                 coord.name = name;
-                coord.coord_system_name = coord_name_itrf2020;
-                coord.epoch = epoch_itrf2020;
+                coord.coord_system_name = coord_name_regional;
+                coord.epoch = epoch_regional;
                 coord.amb_fix_rate = amb_fix_rate;
-                coord.xyz[0] = xyz_itrf2020[0];
-                coord.xyz[1] = xyz_itrf2020[1];
-                coord.xyz[2] = xyz_itrf2020[2];
+                coord.xyz[0] = xyz_regional[0];
+                coord.xyz[1] = xyz_regional[1];
+                coord.xyz[2] = xyz_regional[2];
                 coord.sigma95_xyz[0] = sigma95_xyz[0];
                 coord.sigma95_xyz[1] = sigma95_xyz[1];
                 coord.sigma95_xyz[2] = sigma95_xyz[2];
@@ -1314,7 +1284,7 @@ static int output_data(int rcv, obsd_t* obs, int n, double* pos, nav_t* nav, FIL
     return ret;
 }
 
-static int process_log(const char* rovefname, const char* basefname, const char* brdcfname, int year, int mm, int dd, int opt)
+static int process_log(const char* rovefname, const char* basefname, const char* brdcfname, int year, int mm, int dd, double *pos_base_external, int format, int opt)
 {
     int ret = 0;
     artk_t* artk = new artk_t;
@@ -1326,7 +1296,7 @@ static int process_log(const char* rovefname, const char* basefname, const char*
     station_t* base = new station_t;
     station_t* rove = new station_t;
 
-    rove->open(rovefname, year, mm, dd, ANDROID_PHONE);
+    rove->open(rovefname, year, mm, dd, format);
     base->open(basefname, year, mm, dd, RTCM_FILE);
 
     obsd_t* obsd = new obsd_t[MAXOBS + MAXOBS];
@@ -1342,24 +1312,23 @@ static int process_log(const char* rovefname, const char* basefname, const char*
     double dxyz[4] = { 0 };
 
     FILE* fGGA = (opt & 1 << 1) ? NULL : set_output_file2(rovefname, basefname, ".nmea");
-    FILE* fSOL = (opt & 1 << 2) ? NULL : set_output_file2(rovefname, basefname, ".csv");
+    FILE* fSOL = (opt & 1 << 2) ? NULL : set_output_file2(rovefname, basefname, ".pos");
     FILE* fOBS = (opt & 1 << 2) ? NULL : set_output_file2(rovefname, basefname, ".obs");
-
-    std::vector<solu_t> vSolu;
 
     double dt = 0;
 
     int count = 0;
-
-    if (fSOL)
-    {
-        fprintf(fSOL, "#time[wk,ws],baseline[km],solu_type[1=>FIX,2=>FLT],x[m],y[m],z[m],diffN[m],diffE[m],diffD[m],nsat,age[s],ratio\r\n");
-    }
+    gtime_t stime = { 0 };
+    gtime_t etime = { 0 };
 
     while (true)
     {
         nsat[0] = rove->get_obs(obs_rove, pos_rove);
         if (!nsat[0]) break;
+        if (count)
+            etime = obs_rove[0].time;
+        else
+            stime = obs_rove[0].time;
         if (fabs(pos_rove[0]) < 0.001 || fabs(pos_rove[1]) < 0.001 || fabs(pos_rove[2]) < 0.001)
         {
 
@@ -1372,10 +1341,6 @@ static int process_log(const char* rovefname, const char* basefname, const char*
             pos_rove0[2] = pos_rove[2];
             double blh[3] = { 0 };
             ecef2pos(pos_rove, blh);
-            if (fSOL)
-            {
-                fprintf(fSOL, "#rove coordinate rtcm initial %s %14.9f %14.9f %14.4f %14.4f %14.4f %14.4f\r\n", time_str(obs_rove[0].time, 3), blh[0] * R2D, blh[1] * R2D, blh[2], pos_rove0[0], pos_rove0[1], pos_rove0[2]);
-            }
         }
         else
         {
@@ -1388,10 +1353,6 @@ static int process_log(const char* rovefname, const char* basefname, const char*
             {
                 double blh[3] = { 0 };
                 ecef2pos(pos_rove, blh);
-                if (fSOL)
-                {
-                    fprintf(fSOL, "#rove coordinate rtcm changed %s %14.9f %14.9f %14.4f %14.4f %14.4f %14.4f %14.4f %14.4f %14.4f %14.4f\r\n", time_str(obs_rove[0].time, 3), blh[0]*R2D, blh[1]*R2D, blh[2], pos_rove0[0], pos_rove0[1], pos_rove0[2], dxyz[0], dxyz[1], dxyz[2], dxyz[3]);
-                }
                 pos_rove0[0] = pos_rove[0];
                 pos_rove0[1] = pos_rove[1];
                 pos_rove0[2] = pos_rove[2];
@@ -1423,10 +1384,7 @@ static int process_log(const char* rovefname, const char* basefname, const char*
                 pos_base0[2] = pos_base[2];
                 double blh[3] = { 0 };
                 ecef2pos(pos_base, blh);
-                if (fSOL)
-                {
-                    fprintf(fSOL, "#base coordinate rtcm initial %s %14.9f %14.9f %14.4f %14.4f %14.4f %14.4f\r\n", time_str(obs_base[0].time, 3), blh[0] * R2D, blh[1] * R2D, blh[2], pos_base0[0], pos_base0[1], pos_base0[2]);
-                }
+                printf("#base coordinate rtcm initial %s %14.9f %14.9f %14.4f %14.4f %14.4f %14.4f\r\n", time_str(obs_base[0].time, 3), blh[0] * R2D, blh[1] * R2D, blh[2], pos_base0[0], pos_base0[1], pos_base0[2]);
             }
             else
             {
@@ -1439,13 +1397,25 @@ static int process_log(const char* rovefname, const char* basefname, const char*
                 {
                     double blh[3] = { 0 };
                     ecef2pos(pos_base, blh);
-                    if (fSOL)
-                    {
-                        fprintf(fSOL, "#base rtcm coordinate changed %s %14.9f %14.9f %14.4f %14.4f %14.4f %14.4f %14.4f %14.4f %14.4f %14.4f\r\n", time_str(obs_rove[0].time, 3), blh[0] * R2D, blh[1] * R2D, blh[2], pos_base0[0], pos_base0[1], pos_base0[2], dxyz[0], dxyz[1], dxyz[2], dxyz[3]);
-                    }
+                    printf("#base rtcm coordinate changed %s %14.9f %14.9f %14.4f %14.4f %14.4f %14.4f %14.4f %14.4f %14.4f %14.4f\r\n", time_str(obs_rove[0].time, 3), blh[0] * R2D, blh[1] * R2D, blh[2], pos_base0[0], pos_base0[1], pos_base0[2], dxyz[0], dxyz[1], dxyz[2], dxyz[3]);
                     pos_base0[0] = pos_base[0];
                     pos_base0[1] = pos_base[1];
                     pos_base0[2] = pos_base[2];
+                }
+            }
+            if (fabs(pos_base0[0]) < 0.001 || fabs(pos_base0[1]) < 0.001 || fabs(pos_base0[2]) < 0.001)
+            {
+                if (fabs(pos_base_external[0]) < 0.001 || fabs(pos_base_external[1]) < 0.001 || fabs(pos_base_external[2]) < 0.001)
+                {
+                }
+                else
+                {
+                    pos_base0[0] = pos_base_external[0];
+                    pos_base0[1] = pos_base_external[1];
+                    pos_base0[2] = pos_base_external[2];
+                    double blh[3] = { 0 };
+                    ecef2pos(pos_base0, blh);
+                    printf("#base coordinate external     %s %14.9f %14.9f %14.4f %14.4f %14.4f %14.4f\r\n", time_str(obs_base[0].time, 3), blh[0] * R2D, blh[1] * R2D, blh[2], pos_base0[0], pos_base0[1], pos_base0[2]);
                 }
             }
         }
@@ -1471,81 +1441,9 @@ static int process_log(const char* rovefname, const char* basefname, const char*
             {
                 if (fGGA) { fprintf(fGGA, "%s", gga); fflush(fGGA); }
                 if (fSOL) { fprintf(fSOL, "%s", sol); fflush(fSOL); }
-                solu_t solu;
-                if (solu.parse(sol))
-                {
-                    vSolu.push_back(solu);
-                }
             }
             count++;
         }
-    }
-
-    if (vSolu.size()>0)
-    {
-        double msol[3] = { 0 };
-        int nfix = 0;
-        int nrtk = 0;
-        double sfix[3] = { 0 };
-        double srtk[3] = { 0 };
-
-        int status = solution_status(vSolu, msol, &nfix, sfix, &nrtk, srtk);
-
-        double blh[3] = { 0 };
-        ecef2pos(vSolu.rbegin()->xyz, blh);
-
-        double C_en[3][3] = { 0 };
-        double lat = blh[0];
-        double lon = blh[1];
-
-        C_en[0][0] = -sin(lat) * cos(lon);
-        C_en[1][0] = -sin(lat) * sin(lon);
-        C_en[2][0] = cos(lat);
-        C_en[0][1] = -sin(lon);
-        C_en[1][1] = cos(lon);
-        C_en[2][1] = 0.0;
-        C_en[0][2] = -cos(lat) * cos(lon);
-        C_en[1][2] = -cos(lat) * sin(lon);
-        C_en[2][2] = -sin(lat);
-
-        double dxyz[3] = { 0 };
-
-        /* dXYZ = C_en*dNED */
-
-        dxyz[0] = C_en[0][0] * msol[0] + C_en[0][1] * msol[1] + C_en[0][2] * msol[2];
-        dxyz[1] = C_en[1][0] * msol[0] + C_en[1][1] * msol[1] + C_en[1][2] * msol[2];
-        dxyz[2] = C_en[2][0] * msol[0] + C_en[2][1] * msol[1] + C_en[2][2] * msol[2];
-
-        double covNED[3] = { sfix[0] * sfix[0], sfix[1] * sfix[1], sfix[2] * sfix[2] };
-        /* cov(xyz) = C_en*cov(ned)*C_en' */
-        double covXYZ[3] = { 0 };
-        covXYZ[0] = C_en[0][0] * covNED[0] * C_en[0][0] + C_en[0][1] * covNED[1] * C_en[0][1] + C_en[0][2] * covNED[2] * C_en[0][2];
-        covXYZ[1] = C_en[1][0] * covNED[0] * C_en[1][0] + C_en[1][1] * covNED[1] * C_en[1][1] + C_en[1][2] * covNED[2] * C_en[1][2];
-        covXYZ[2] = C_en[2][0] * covNED[0] * C_en[2][0] + C_en[2][1] * covNED[1] * C_en[2][1] + C_en[2][2] * covNED[2] * C_en[2][2];
-
-        /* RTK fix accuracy in XYZ */
-        double sfix_xyz[3] = { sqrt(covXYZ[0]), sqrt(covXYZ[1]), sqrt(covXYZ[2]) };
-        /* get RTK accuracy in XYZ */
-        covNED[0] = srtk[0] * srtk[0];
-        covNED[1] = srtk[1] * srtk[1];
-        covNED[2] = srtk[2] * srtk[2];
-
-        covXYZ[0] = C_en[0][0] * covNED[0] * C_en[0][0] + C_en[0][1] * covNED[1] * C_en[0][1] + C_en[0][2] * covNED[2] * C_en[0][2];
-        covXYZ[1] = C_en[1][0] * covNED[0] * C_en[1][0] + C_en[1][1] * covNED[1] * C_en[1][1] + C_en[1][2] * covNED[2] * C_en[1][2];
-        covXYZ[2] = C_en[2][0] * covNED[0] * C_en[2][0] + C_en[2][1] * covNED[1] * C_en[2][1] + C_en[2][2] * covNED[2] * C_en[2][2];
-
-        /* RTK accuracy in XYZ */
-        double srtk_xyz[3] = { sqrt(covXYZ[0]), sqrt(covXYZ[1]), sqrt(covXYZ[2]) };
-
-        if (fSOL)
-        {
-            fprintf(fSOL, "#stat[1=>FLT NED,2=>FIX NED],dN[m],dE[m],dD[m],std_fix_N[m],std_fix_E[m],std_fix_D[m],count_fix,std_rtk_N[m],std_rtk_E[m],std_rtk_D[m],count_rtk\r\n");
-            fprintf(fSOL, "#stat[3=>FLT XYZ,4=>FIX XYZ],dX[m],dY[m],dZ[m],std_fix_X[m],std_fix_Y[m],std_fix_Z[m],count_fix,std_rtk_X[m],std_rtk_Y[m],std_rtk_Z[m],count_rtk\r\n");
-            fprintf(fSOL, "#stat=%i,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f,%6i,%10.4f,%10.4f,%10.4f,%6i\n", status, msol[0], msol[1], msol[2], sfix[0], sfix[1], sfix[2], nfix, srtk[0], srtk[1], srtk[2], nrtk);
-            fprintf(fSOL, "#stat=%i,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f,%6i,%10.4f,%10.4f,%10.4f,%6i\n", status + 2, dxyz[0], dxyz[1], dxyz[2], sfix_xyz[0], sfix_xyz[1], sfix_xyz[2], nfix, srtk_xyz[0], srtk_xyz[1], srtk_xyz[2], nrtk);
-        }
-        if (!(opt & (1 << 0))) printf("#ble=%i,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f,%6i,%10.4f,%10.4f,%10.4f,%6i\n", status, msol[0], msol[1], msol[2], sfix[0], sfix[1], sfix[2], nfix, srtk[0], srtk[1], srtk[2], nrtk);
-        if (!(opt & (1 << 0))) printf("#ble=%i,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f,%6i,%10.4f,%10.4f,%10.4f,%6i\n", status + 2, dxyz[0], dxyz[1], dxyz[2], sfix_xyz[0], sfix_xyz[1], sfix_xyz[2], nfix, srtk_xyz[0], srtk_xyz[1], srtk_xyz[2], nrtk);
     }
 
     delete brdc;
@@ -1555,16 +1453,11 @@ static int process_log(const char* rovefname, const char* basefname, const char*
 
     delete artk;
 
+    if (!(opt & (1 << 0))) printf("beg =%s\n", time_str(stime,3));
+    if (!(opt & (1 << 0))) printf("end =%s\n", time_str(etime, 3));
     if (!(opt & (1 << 0))) printf("rove=%s\n", rovefname);
     if (!(opt & (1 << 0))) printf("base=%s\n", basefname);
     if (!(opt & (1 << 0))) printf("brdc=%s\n", brdcfname);
-
-    if (fSOL)
-    {
-        fprintf(fSOL, "#rove=%s\n", rovefname);
-        fprintf(fSOL, "#base=%s\n", basefname);
-        fprintf(fSOL, "#brdc=%s\n", brdcfname);
-    }
 
     if (fSOL) fclose(fSOL);
     if (fGGA) fclose(fGGA);
@@ -1588,6 +1481,7 @@ int main(int argc, char** argv)
         int mm = 0;
         int dd = 0;
         int opt = 0;
+        int format = RTCM_FILE;
         std::string rovefname;
         std::string basefname;
         std::string brdcfname;
@@ -1595,6 +1489,7 @@ int main(int argc, char** argv)
         std::string jsonfname;
         std::string ccsvfname;
         char* temp = nullptr;
+        double pos_base[3] = { 0 };
         for (int i = 1; i < argc; ++i)
         {
             if (temp = strchr(argv[i], '='))
@@ -1602,6 +1497,12 @@ int main(int argc, char** argv)
                 temp[0] = '\0';
                 if (strstr(argv[i], "rove"))
                 {
+                    if (strstr(argv[i], "android"))
+                        format = ANDROID_PHONE;
+                    else if (strstr(argv[i], "rinex"))
+                        format = RINEX;
+                    else if (strstr(argv[i], "rtcm"))
+                        format = RTCM_FILE;
                     rovefname = std::string(temp + 1);
                 }
                 else if (strstr(argv[i], "base"))
@@ -1648,12 +1549,33 @@ int main(int argc, char** argv)
                     {
                     }
                 }
+                else if (strstr(argv[i], "pos0"))
+                {
+                    char* val[100];
+                    int num = parse_fields(temp + 1, val, ',', 100);
+                    if (num > 2)
+                    {
+                        pos_base[0] = atof(val[0]);
+                        pos_base[1] = atof(val[1]);
+                        pos_base[2] = atof(val[2]);
+                    }
+                }
             }
 
         }
         clock_t stime = clock();
 
-        ret = process_log(rovefname.c_str(), basefname.c_str(), brdcfname.c_str(), yyyy, mm, dd, opt);
+        for (std::map<std::string, coord_t>::iterator pCoord = mCoords.begin(); pCoord != mCoords.end(); ++pCoord)
+        {
+            if (basefname.find(pCoord->first) != std::string::npos)
+            {
+                pos_base[0] = pCoord->second.xyz[0];
+                pos_base[1] = pCoord->second.xyz[1];
+                pos_base[2] = pCoord->second.xyz[2];
+            }
+        }
+
+        ret = process_log(rovefname.c_str(), basefname.c_str(), brdcfname.c_str(), yyyy, mm, dd, pos_base, format, opt);
 
         clock_t etime = clock();
         double cpu_time_used = ((double)(etime - stime)) / CLOCKS_PER_SEC;

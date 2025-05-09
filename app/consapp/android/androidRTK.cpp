@@ -18,7 +18,7 @@ artk_t::artk_t()
 	init_rtcm(rtcm_nav);
 	*opt = prcopt_default;
 	opt->mode = PMODE_KINEMA;
-	opt->navsys = SYS_GPS | SYS_GAL | SYS_CMP;
+	opt->navsys = SYS_GPS | SYS_GLO | SYS_GAL | SYS_CMP;
 	opt->elmin = 10.0 * D2R;
 	opt->refpos = POSOPT_RTCM;
 	opt->glomodear = 0;/* GLO AR OFF */
@@ -267,33 +267,24 @@ int artk_t::proc(char* gga, char *sol)
 					int wk = 0;
 					double ws = time2gpst(rtk->sol.time, &wk);
 
-					double blh[3] = { 0 };
+					double pos[3] = { 0 };
 
-					ecef2pos(rtk->rb, blh);
+					ecef2pos(rtk->sol.rr, pos);
 
-					double C_en[3][3] = { 0 };
-					double lat = blh[0];
-					double lon = blh[1];
+					double P[9] = { 0 };
+					double Q[9] = { 0 };
 
-					C_en[0][0] = -sin(lat) * cos(lon);
-					C_en[1][0] = -sin(lat) * sin(lon);
-					C_en[2][0] = cos(lat);
-					C_en[0][1] = -sin(lon);
-					C_en[1][1] = cos(lon);
-					C_en[2][1] = 0.0;
-					C_en[0][2] = -cos(lat) * cos(lon);
-					C_en[1][2] = -cos(lat) * sin(lon);
-					C_en[2][2] = -sin(lat);
+					/* solution to covariance ----------------------------------------------------*/
+					P[0] = rtk->sol.qr[0]; /* xx or ee */
+					P[4] = rtk->sol.qr[1]; /* yy or nn */
+					P[8] = rtk->sol.qr[2]; /* zz or uu */
+					P[1] = P[3] = rtk->sol.qr[3]; /* xy or en */
+					P[5] = P[7] = rtk->sol.qr[4]; /* yz or nu */
+					P[2] = P[6] = rtk->sol.qr[5]; /* zx or ue */
 
-					double dned[3] = { 0 };
+					covenu(pos, P, Q);
 
-					/* dNED = C_en'*dXYZ */
-
-					dned[0] = C_en[0][0] * dxyz[0] + C_en[1][0] * dxyz[1] + C_en[2][0] * dxyz[2];
-					dned[1] = C_en[0][1] * dxyz[0] + C_en[1][1] * dxyz[1] + C_en[2][1] * dxyz[2];
-					dned[2] = C_en[0][2] * dxyz[0] + C_en[1][2] * dxyz[1] + C_en[2][2] * dxyz[2];
-
-					sprintf(sol, "%4i,%10.3f,%10.3f,%i,%14.4f,%14.4f,%14.4f,%14.4f,%14.4f,%14.4f,%3i,%10.3f,%10.3f\r\n", wk, ws, dist, rtk->sol.stat, rtk->rb[0], rtk->rb[1], rtk->rb[2], dned[0], dned[1], dned[2], rtk->sol.ns, rtk->sol.age, rtk->sol.ratio);
+					sprintf(sol, "%4i,%10.3f,%14.9f,%14.9f,%10.4f,%3i,%3i,%8.4f,%8.4f,%8.4f,%8.4f,%8.4f,%8.4f,%6.2f,%6.1f,%10.3f\r\n", wk, ws, pos[0]*R2D, pos[1] * R2D, pos[2], rtk->sol.stat, rtk->sol.ns, sqrt(Q[4]), sqrt(Q[0]), sqrt(Q[8]), Q[1], Q[2], Q[5], rtk->sol.age, rtk->sol.ratio, dist);
 				}
 			}
 
