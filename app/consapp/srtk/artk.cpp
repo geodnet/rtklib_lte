@@ -1,6 +1,66 @@
 #include "artk.h"
 
 
+extern int rtk_proc(obsd_t* obs, svec_t* vec, int n, double* pos, char* gga)
+{
+	int ret = 0;
+
+	return ret;
+}
+extern int comp_vec(obsd_t* obs, svec_t* vec, int n, nav_t* nav)
+{
+	int ret = 0;
+	double* rs;
+	double* dts;
+	double * var;
+	int *svh;
+	int i = 0;
+	int sys = 0;
+	int prn = 0;
+	int wk = 0;
+	if (n > 0)
+	{
+		rs = mat(6, n); dts = mat(2, n); var = mat(1, n);
+		svh = new int[n];
+
+		/* satellite positons, velocities and clocks */
+		satposs(obs[0].time, obs, n, nav, EPHOPT_BRDC, rs, dts, var, svh);
+
+		for (i = 0; i < n; ++i)
+		{
+			memset(vec + i, 0, sizeof(svec_t));
+			vec[i].sat = obs[i].sat;
+			sys = satsys(vec[i].sat, &prn);
+			vec[i].prn = prn;
+			if (sys == SYS_GPS) vec[i].sys = 0;
+			else if (sys == SYS_GLO) vec[i].sys = 1;
+			else if (sys == SYS_GAL) vec[i].sys = 2;
+			else if (sys == SYS_CMP && prn <= 16) vec[i].sys = 3;
+			else if (sys == SYS_CMP && prn > 16) vec[i].sys = 4;
+			else if (sys == SYS_QZS) vec[i].sys = 5;
+			else if (sys == SYS_IRN) vec[i].sys = 6;
+			else if (sys == SYS_SBS) vec[i].sys = 7;
+			else vec[i].sys = 8;
+			vec[i].svh = svh[i];
+			vec[i].var = var[i];
+			vec[i].rs[0] = rs[i * 6 + 0];
+			vec[i].rs[1] = rs[i * 6 + 1];
+			vec[i].rs[2] = rs[i * 6 + 2];
+			vec[i].rs[3] = rs[i * 6 + 3];
+			vec[i].rs[4] = rs[i * 6 + 4];
+			vec[i].rs[5] = rs[i * 6 + 5];
+			vec[i].dts[0] = dts[i * 2 + 0] * CLIGHT;
+			vec[i].dts[1] = dts[i * 2 + 1] * CLIGHT;
+			if (!vec[i].svh && (fabs(vec[i].rs[0]) < 0.001 || fabs(vec[i].rs[1]) < 0.001 || fabs(vec[i].rs[2]) < 0.001)) vec[i].svh = 255;
+		}
+
+		free(rs); free(dts); free(var);
+		delete[]svh;
+	}
+
+	return ret;
+}
+
 artk_t::artk_t()
 {
 	rtcm_obs = new rtcm_t;
@@ -247,6 +307,22 @@ int artk_t::proc(char* gga, char *sol)
 			rtkpos(rtk, cur_obs, nobs, &rtcm_nav->nav);
 
 			ret = outnmea_gga((uint8_t*)gga, &rtk->sol);
+
+			if (nobs > 0)
+			{
+				svec_t* cur_vec = new svec_t[nobs];
+				double cur_pos[6] = { rtk->sol.rr[0], rtk->sol.rr[1], rtk->sol.rr[2], rtk->rb[0], rtk->rb[1], rtk->rb[2] };
+
+				comp_vec(cur_obs, cur_vec, nobs, &rtcm_nav->nav);
+
+				char gga_rtk[255] = { 0 };
+				if (rtk_proc(cur_obs, cur_vec, nobs, cur_pos, gga_rtk))
+				{
+
+				}
+
+				delete[] cur_vec;
+			}
 
 			if (rtk->sol.stat == SOLQ_FIX || rtk->sol.stat == SOLQ_FLOAT)
 			{

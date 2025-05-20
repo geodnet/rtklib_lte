@@ -1008,13 +1008,12 @@ static int log2rtcm(const char *fname, int flag, std::string brdcfname)
 						numofbyte++;
 						if (rtcm->nbyte == 0 && rtcm->len > 0)
 						{
+							++numofmsg;
 							if (rtk_crc24q(rtcm->buff, rtcm->len) != getbitu(rtcm->buff, rtcm->len * 8, 24))
 							{
 								numofcrc++;
-							}
-							else
-							{
-								++numofmsg;
+								rtcm->len = 0;
+								continue;
 							}
 							rtcm->len = 0;
 							int vers = getbitu(rtcm->buff, 24 + 12, 3);
@@ -1116,13 +1115,12 @@ static int procrtcm(const char* fname, int flag, std::string brdcfname, int year
 		if (ret1 == 2) brdc.add_nav_eph(rtcm);
 		if (rtcm->nbyte == 0 && rtcm->len > 0)
 		{
+			++numofmsg;
 			if (rtk_crc24q(rtcm->buff, rtcm->len) != getbitu(rtcm->buff, rtcm->len * 8, 24))
 			{
 				++numofcrc;
-			}
-			else
-			{
-				++numofmsg;
+				rtcm->len = 0;
+				continue;
 			}
 			rtcm->len = 0;
 			int type = getbitu(rtcm->buff, 24, 12);

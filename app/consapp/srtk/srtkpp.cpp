@@ -963,57 +963,7 @@ static int solution_status(std::vector<solu_t>& solu, double *msol, int *nfix, d
     return ret;
 }
 
-typedef struct
-{
-    int sat;
-    int sys;
-    int prn;
-    int svh;
-    double ws;
-    double var;
-    double rs[6];
-    double dt[2];
-}svec_t;
 
-extern int comp_vec(obsd_t* obs, svec_t* vec, int n, nav_t* nav)
-{
-    int ret = 0;
-    double* rs, * dts, * var;
-    int i, * svh;
-    int wk = 0;
-    if (n > 0)
-    {
-        rs = mat(6, n); dts = mat(2, n); var = mat(1, n);
-        svh = new int[n];
-
-        /* satellite positons, velocities and clocks */
-        satposs(obs[0].time, obs, n, nav, EPHOPT_BRDC, rs, dts, var, svh);
-
-        for (i = 0; i < n; ++i)
-        {
-            memset(vec + i, 0, sizeof(svec_t));
-            vec[i].sat = obs[i].sat;
-            vec[i].sys = satsys(vec[i].sat, &vec[i].prn);
-            vec[i].ws = time2gpst(obs[i].time, &wk);
-            vec[i].svh = svh[i];
-            vec[i].var = var[i];
-            vec[i].rs[0] = rs[i * 6 + 0];
-            vec[i].rs[1] = rs[i * 6 + 1];
-            vec[i].rs[2] = rs[i * 6 + 2];
-            vec[i].rs[3] = rs[i * 6 + 3];
-            vec[i].rs[4] = rs[i * 6 + 4];
-            vec[i].rs[5] = rs[i * 6 + 5];
-            vec[i].dt[0] = dts[i * 2 + 0] * CLIGHT;
-            vec[i].dt[1] = dts[i * 2 + 1] * CLIGHT;
-            if (!vec[i].svh && (fabs(vec[i].rs[0]) < 0.001 || fabs(vec[i].rs[1]) < 0.001 || fabs(vec[i].rs[2]) < 0.001)) vec[i].svh = 255;
-        }
-
-        free(rs); free(dts); free(var);
-        delete[]svh;
-    }
-
-    return ret;
-}
 
 static int output_data(int rcv, obsd_t* obs, int n, double* pos, nav_t* nav, FILE* fOBS)
 {
@@ -1047,7 +997,7 @@ static int output_data(int rcv, obsd_t* obs, int n, double* pos, nav_t* nav, FIL
                 ws = time2gpst(obs[i].time, &wk);
                 int prn = 0;
                 int sys = satsys(vec[i].sat, &prn);
-                fprintf(fOBS, "VEC,%04i,%10.4f,%i,%3i,%3i,%3i,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f,%14.4f,%10.4f,%10.4f,%i\r\n", wk, ws, rcv, vec[i].sat, sys, prn, vec[i].rs[0], vec[i].rs[1], vec[i].rs[2], vec[i].rs[3], vec[i].rs[4], vec[i].rs[5], vec[i].dt[0], vec[i].dt[1], vec[i].var, vec[i].svh);
+                fprintf(fOBS, "VEC,%04i,%10.4f,%i,%3i,%3i,%3i,%14.4f,%14.4f,%14.4f,%10.4f,%10.4f,%10.4f,%14.4f,%10.4f,%10.4f,%i\r\n", wk, ws, rcv, vec[i].sat, sys, prn, vec[i].rs[0], vec[i].rs[1], vec[i].rs[2], vec[i].rs[3], vec[i].rs[4], vec[i].rs[5], vec[i].dts[0], vec[i].dts[1], vec[i].var, vec[i].svh);
             }
         }
 

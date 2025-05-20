@@ -3,6 +3,27 @@
 #include "rtklib.h"
 #include <mutex>
 
+typedef struct
+{
+	int    sat;				/* satellite system GPS(0),GLO(1),GAL(2),BD2(3),BD3(4),QZS(5),IRN(6) */
+	int    sys;
+	int    prn;
+	double rs[6];
+	double dts[2];
+	double var;
+	int    svh;
+	double azel[2];
+	double e[3];
+	double r;
+	double tro;
+	double ion;
+}svec_t;
+
+int comp_vec(obsd_t* obs, svec_t* vec, int n, nav_t* nav);
+
+/* rcv=1 rove, rcv=2 base, pos rove, pos+3 base */
+int rtk_proc(obsd_t* obs, svec_t* vec, int n, double* pos, char *gga);
+
 struct artk_t
 {
 	rtcm_t* rtcm_obs;	/* rtcm decoder to base stream */
