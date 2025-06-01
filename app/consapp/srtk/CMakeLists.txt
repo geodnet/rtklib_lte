@@ -9,8 +9,8 @@ include_directories(../../../src)
 include_directories(../../../src/rcv)
 add_executable(srtkpp
     srtkpp.cpp
-    srtk.h
-    srtk.cpp
+    artk.h
+    artk.cpp
     ../../../src/rtklib.h   
     ../../../src/rtkcmn.c
     ../../../src/rinex.c   
