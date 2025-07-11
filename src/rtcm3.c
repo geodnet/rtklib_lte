@@ -1056,6 +1056,16 @@ static int decode_type1033(rtcm_t *rtcm)
         trace(2,"rtcm3 1033 length error: len=%d\n",rtcm->len);
         return -1;
     }
+    while(msg=strchr(des,'\n')) msg[0]='_';
+    while(msg=strchr(des,'\r')) msg[0]='_';
+    while(msg=strchr(sno,'\n')) msg[0]='_';
+    while(msg=strchr(sno,'\r')) msg[0]='_';
+    while(msg=strchr(rec,'\n')) msg[0]='_';
+    while(msg=strchr(rec,'\r')) msg[0]='_';
+    while(msg=strchr(ver,'\n')) msg[0]='_';
+    while(msg=strchr(ver,'\r')) msg[0]='_';
+    while(msg=strchr(rsn,'\n')) msg[0]='_';
+    while(msg=strchr(rsn,'\r')) msg[0]='_';
     if (rtcm->outtype) {
         msg=rtcm->msgtype+strlen(rtcm->msgtype);
         sprintf(msg," staid=%4d",staid);

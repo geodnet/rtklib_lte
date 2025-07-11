@@ -1092,7 +1092,7 @@ static int scan_file(char **files, int nf, rnxopt_t *opt, strfile_t *str,
     trace(3,"scan_file: nf=%d\n",nf);
     
     for (m=0;m<nf&&!abort;m++) {
-        scan_4054_1(files[m],opt->option&1<<15);
+        /*scan_4054_1(files[m],opt->option&1<<15);*/
         if (!open_strfile(str,files[m])) {
             continue;
         }
