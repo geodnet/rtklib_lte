@@ -106,14 +106,14 @@ static int read_buff_from_file(FILE* fBIN, buf_t* buff, int nseg)
 	return ret;
 }
 
-static FILE* set_output_file(const char* fname, const char* key)
+static FILE* set_output_file(const char* fname, const char* key, bool is_binary=true)
 {
 	char filename[255] = { 0 }, outfilename[255] = { 0 };
 	strcpy(filename, fname);
 	char* temp = strrchr(filename, '.');
 	if (temp) temp[0] = '\0';
 	sprintf(outfilename, "%s-%s", filename, key);
-	return fopen(outfilename, "wb");
+	return is_binary ? fopen(outfilename, "wb") : fopen(outfilename, "w");
 }
 
 static int output_status(std::vector<double>& vDt, std::map<int, int>& mGAP, int numofmsg, int numofcrc, int numofepoch, gtime_t stime, gtime_t etime, int v1, int v2, int v3, int v4, const char *fname, int is_time, double* rate, char *ver, char *gnss)
@@ -951,12 +951,45 @@ bool is_rtcm2_obs_data(int type)
 		type == 1009 || type == 1010 || type == 1011 || type == 1012;	/* GLO */
 }
 
-static int log2rtcm(const char *fname, int flag, std::string brdcfname)
+void BlhToCen(double lat, double lon, double c_en[3][3])
+{
+	c_en[0][0] = -sin(lat) * cos(lon);
+	c_en[1][0] = -sin(lat) * sin(lon);
+	c_en[2][0] = cos(lat);
+	c_en[0][1] = -sin(lon);
+	c_en[1][1] = cos(lon);
+	c_en[2][1] = 0.0;
+	c_en[0][2] = -cos(lat) * cos(lon);
+	c_en[1][2] = -cos(lat) * sin(lon);
+	c_en[2][2] = -sin(lat);
+}
+
+void NED_to_XYZ(double lat, double lon, double* dned, double* dxyz)
+{
+	double C_en[3][3] = { 0 };
+	BlhToCen(lat, lon, C_en);
+	dxyz[0] = C_en[0][0] * dned[0] + C_en[0][1] * dned[1] + C_en[0][2] * dned[2];
+	dxyz[1] = C_en[1][0] * dned[0] + C_en[1][1] * dned[1] + C_en[1][2] * dned[2];
+	dxyz[2] = C_en[2][0] * dned[0] + C_en[2][1] * dned[1] + C_en[2][2] * dned[2];
+	return;
+}
+void XYZ_to_NED(double lat, double lon, double* dxyz, double* dned)
+{
+	double C_en[3][3] = { 0 };
+	BlhToCen(lat, lon, C_en);
+	dned[0] = C_en[0][0] * dxyz[0] + C_en[1][0] * dxyz[1] + C_en[2][0] * dxyz[2];
+	dned[1] = C_en[0][1] * dxyz[0] + C_en[1][1] * dxyz[1] + C_en[2][1] * dxyz[2];
+	dned[2] = C_en[0][2] * dxyz[0] + C_en[1][2] * dxyz[1] + C_en[2][2] * dxyz[2];
+	return;
+}
+
+static int log2rtcm(const char *fname, int flag, std::string brdcfname, double* refxyz)
 {
 	int ret = 0;
 	FILE *fLOG = fopen(fname, "rb");
 	FILE *fRTCM = nullptr;
 	FILE* fRTCM30 = nullptr;
+	FILE* fPOS = nullptr;
 	rtcm_t* rtcm = new rtcm_t;
 	init_rtcm(rtcm);
 	
@@ -1086,6 +1119,43 @@ static int log2rtcm(const char *fname, int flag, std::string brdcfname)
 										if (fRTCM30) fwrite(rtcm->buff, sizeof(char), rtcm->len + 3, fRTCM30);
 									}
 								}
+								if (type == 1005 || type == 1006)
+								{
+									if (flag & (1 << 9))
+									{
+										/* output rtcm pos data */
+										if (!fPOS) fPOS = set_output_file(fname, "pos.csv", false);
+										int wk = 0;
+										double ws = time2gpst(rtcm->time, &wk);
+										double blh[3] = { 0 };
+										int is_blh_ok = 0;
+										double dxyz[3] = { 0 };
+										double dned[3] = { 0 };
+										double ep[6] = { 0 };
+										time2epoch(rtcm->time, ep);
+										if (fabs(rtcm->sta.pos[0]) < 0.001 || fabs(rtcm->sta.pos[1]) < 0.001 || fabs(rtcm->sta.pos[2]) < 0.001)
+										{
+
+										}
+										else
+										{
+											ecef2pos(rtcm->sta.pos, blh);
+											is_blh_ok = 1;
+											if (fabs(refxyz[0]) < 0.001 || fabs(refxyz[1]) < 0.001 || fabs(refxyz[2]) < 0.001)
+											{
+
+											}
+											else
+											{
+												dxyz[0] = rtcm->sta.pos[0] - refxyz[0];
+												dxyz[1] = rtcm->sta.pos[1] - refxyz[1];
+												dxyz[2] = rtcm->sta.pos[2] - refxyz[2];
+												XYZ_to_NED(blh[0], blh[1], dxyz, dned);
+											}
+										}
+										if (fPOS) fprintf(fPOS, "%4i,%10.3f,%4i,%2i,%2i,%2i,%2i,%2i,%3i,%14.4f,%14.4f,%14.4f,%14.9f,%14.9f,%10.4f,%i,%14.4f,%10.4f,%10.4f,%10.4f\n", wk, ws, (int)ep[0], (int)ep[1], (int)ep[2], (int)ep[3], (int)ep[4], (int)ep[5], rtcm->obs.n, rtcm->sta.pos[0], rtcm->sta.pos[1], rtcm->sta.pos[2], blh[0] * R2D, blh[1] * R2D, blh[2], is_blh_ok, norm(dxyz, 3), dned[0], dned[1], dned[2]);
+									}
+								}
 							}
 							rtcm->len = 0;
 						}
@@ -1129,6 +1199,7 @@ static int log2rtcm(const char *fname, int flag, std::string brdcfname)
 	if (fRTCM30) fclose(fRTCM30);
 	if (fBRDC) fclose(fBRDC);
 	if (fCSV) fclose(fCSV);
+	if (fPOS) fclose(fPOS);
 
 	free_rtcm(rtcm);
 	delete rtcm;
@@ -1138,12 +1209,13 @@ static int log2rtcm(const char *fname, int flag, std::string brdcfname)
 
 
 
-static int procrtcm(const char* fname, int flag, std::string brdcfname, int year, int mon, int day)
+static int procrtcm(const char* fname, int flag, std::string brdcfname, int year, int mon, int day, double *refxyz)
 {
 	int ret = 0;
 	FILE* fLOG = fopen(fname, "rb");
 	FILE* fRTCM = nullptr;
 	FILE* fRTCM30 = nullptr;
+	FILE* fPOS = nullptr;
 	rtcm_t* rtcm = new rtcm_t;
 	init_rtcm(rtcm);
 
@@ -1249,6 +1321,42 @@ static int procrtcm(const char* fname, int flag, std::string brdcfname, int year
 						if (fRTCM30) fwrite(rtcm->buff, sizeof(char), rtcm->len + 3, fRTCM30);
 					}
 				}
+				if (type == 1005 || type == 1006)
+				{
+					if (flag & (1 << 9))
+					{
+						/* output rtcm pos data */
+						if (!fPOS) fPOS = set_output_file(fname, "pos.csv", false);
+						int wk = 0;
+						double ws = time2gpst(rtcm->time, &wk);
+						double blh[3] = { 0 };
+						int is_blh_ok = 0;
+						double dxyz[3] = { 0 };
+						double dned[3] = { 0 };
+						time2epoch(rtcm->time, ep);
+						if (fabs(rtcm->sta.pos[0]) < 0.001 || fabs(rtcm->sta.pos[1]) < 0.001 || fabs(rtcm->sta.pos[2]) < 0.001)
+						{
+
+						}
+						else
+						{
+							ecef2pos(rtcm->sta.pos, blh);
+							is_blh_ok = 1;
+							if (fabs(refxyz[0]) < 0.001 || fabs(refxyz[1]) < 0.001 || fabs(refxyz[2]) < 0.001)
+							{
+
+							}
+							else
+							{
+								dxyz[0] = rtcm->sta.pos[0] - refxyz[0];
+								dxyz[1] = rtcm->sta.pos[1] - refxyz[1];
+								dxyz[2] = rtcm->sta.pos[2] - refxyz[2];
+								XYZ_to_NED(blh[0], blh[1], dxyz, dned);
+							}
+						}
+						if (fPOS) fprintf(fPOS, "%4i,%10.3f,%4i,%2i,%2i,%2i,%2i,%2i,%3i,%14.4f,%14.4f,%14.4f,%14.9f,%14.9f,%10.4f,%i,%14.4f,%10.4f,%10.4f,%10.4f\n", wk, ws, (int)ep[0], (int)ep[1], (int)ep[2], (int)ep[3], (int)ep[4], (int)ep[5], rtcm->obs.n, rtcm->sta.pos[0], rtcm->sta.pos[1], rtcm->sta.pos[2], blh[0] * R2D, blh[1] * R2D, blh[2], is_blh_ok, norm(dxyz,3), dned[0], dned[1], dned[2]);
+					}
+				}
 			}
 			rtcm->len = 0;
 		}
@@ -1294,6 +1402,7 @@ static int procrtcm(const char* fname, int flag, std::string brdcfname, int year
 	if (fBRDC) fclose(fBRDC);
 	if (fSAT) fclose(fSAT);
 	if (fCSV) fclose(fCSV);
+	if (fPOS) fclose(fPOS);
 
 	free_rtcm(rtcm);
 	delete rtcm;
@@ -1305,7 +1414,7 @@ int main(int argc, char* argv[])
 {
 	if (argc < 2)
 	{
-		printf("log2rtcm file [rtcm=1] [date=yyyy,mm,dd] [brdc=file] [outsatpos=1] [outsatinf=1] [outrtcm1=1] [outrtcm30=1]");
+		printf("log2rtcm file [rtcm=1] [date=yyyy,mm,dd] [brdc=file] [outsatpos=1] [outsatinf=1] [outrtcm1=1] [outrtcm30=1] [posout=1] [refxyz=x,y,z]");
 	}
 	else
 	{
@@ -1327,8 +1436,11 @@ int main(int argc, char* argv[])
 		flag |= 1 << 6;	/* set geod flag as default */
 		//flag |= 1 << 7; /* set output 1 s rtcm data by default */
 		flag |= 1 << 8; /* set output 30s rtcm data by default */
+		flag |= 1 << 9; /* set output pos (1005/1006) data by default */
 
 		int is_rtcm_format = 0;
+
+		double refxyz[3] = { 0 };
 
 		for (int i = 2; i < argc; ++i)
 		{
@@ -1416,6 +1528,17 @@ int main(int argc, char* argv[])
 					flag &= ~(1 << 5);	/* clear time flag */
 				}
 			}
+			if (strstr(argv[i], "posout") && (temp = strrchr(argv[i], '=')))
+			{
+				if (atoi(temp + 1))
+				{
+					flag |= 1 << 9;		/* set output position data flag */
+				}
+				else
+				{
+					flag &= ~(1 << 9);	/* clear output position data flag */
+				}
+			}
 			if (strstr(argv[i], "geod") && (temp = strrchr(argv[i], '=')))
 			{
 				if (atoi(temp + 1))
@@ -1440,11 +1563,22 @@ int main(int argc, char* argv[])
 					day = atoi(val[2]);
 				}
 			}
+			if (strstr(argv[i], "refxyz") && (temp = strrchr(argv[i], '=')))
+			{
+				char* val[100];
+				int num = parse_fields((char*)(temp + 1), val, ',', 100);
+				if (num > 2)
+				{
+					refxyz[0] = atof(val[0]);
+					refxyz[1] = atof(val[1]);
+					refxyz[2] = atof(val[2]);
+				}
+			}
 		}
 		if (is_rtcm_format)
-			procrtcm(argv[1], flag, brdcfname, year, mon, day);
+			procrtcm(argv[1], flag, brdcfname, year, mon, day, refxyz);
 		else
-			log2rtcm(argv[1], flag, brdcfname);
+			log2rtcm(argv[1], flag, brdcfname, refxyz);
 	}
 	return 0;
 }
