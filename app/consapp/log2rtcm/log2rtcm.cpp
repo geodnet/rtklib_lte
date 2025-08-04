@@ -932,11 +932,31 @@ static int proc_epoch_data(std::vector<epoch_t>& vEpoch, brdc_t &brdc, nav_t *na
 	if (fCSV) fflush(fCSV);
 	return ret;
 }
+
+bool is_rtcm3_obs_data(int type)
+{
+	return
+		type == 1071 || type == 1072 || type == 1073 || type == 1074 || type == 1075 || type == 1076 || type == 1077 ||	/* GPS */
+		type == 1081 || type == 1082 || type == 1083 || type == 1084 || type == 1085 || type == 1086 || type == 1087 ||	/* GLO */
+		type == 1091 || type == 1092 || type == 1093 || type == 1094 || type == 1095 || type == 1096 || type == 1097 ||	/* GAL */
+		type == 1101 || type == 1102 || type == 1103 || type == 1104 || type == 1105 || type == 1106 || type == 1107 ||	/* SBS */
+		type == 1111 || type == 1112 || type == 1113 || type == 1114 || type == 1115 || type == 1116 || type == 1117 ||	/* QZS */
+		type == 1121 || type == 1122 || type == 1123 || type == 1124 || type == 1125 || type == 1126 || type == 1127 ||	/* BDS */
+		type == 1131 || type == 1132 || type == 1133 || type == 1134 || type == 1135 || type == 1136 || type == 1137;	/* IRN */
+}
+bool is_rtcm2_obs_data(int type)
+{
+	return
+		type == 1001 || type == 1002 || type == 1003 || type == 1004 ||	/* GPS */
+		type == 1009 || type == 1010 || type == 1011 || type == 1012;	/* GLO */
+}
+
 static int log2rtcm(const char *fname, int flag, std::string brdcfname)
 {
 	int ret = 0;
 	FILE *fLOG = fopen(fname, "rb");
 	FILE *fRTCM = nullptr;
+	FILE* fRTCM30 = nullptr;
 	rtcm_t* rtcm = new rtcm_t;
 	init_rtcm(rtcm);
 	
@@ -985,6 +1005,7 @@ static int log2rtcm(const char *fname, int flag, std::string brdcfname)
 			memset(&buf, 0, sizeof(buf_t)); /* reset buffer */
 		}
 	}
+	rtcm->obs.n = 0;
 	/* read log file */
 	numofcrc = 0;
 	while (fLOG && !feof(fLOG))
@@ -996,7 +1017,6 @@ static int log2rtcm(const char *fname, int flag, std::string brdcfname)
 			int ret = 0;
 			if (slen > 2)
 			{
-				if (!fRTCM) fRTCM = set_output_file(fname, "log.rtcm");
 				char* tempBuff = new char[slen];
 				if (fread((char*)tempBuff, sizeof(char), slen, fLOG) == slen)
 				{
@@ -1015,16 +1035,59 @@ static int log2rtcm(const char *fname, int flag, std::string brdcfname)
 								rtcm->len = 0;
 								continue;
 							}
-							rtcm->len = 0;
-							int vers = getbitu(rtcm->buff, 24 + 12, 3);
-							int stype = getbitu(rtcm->buff, 24 + 12 + 3, 9);
-							if (stype == 300)
+							int type = getbitu(rtcm->buff, 24, 12);
+							if (type == 4054)
 							{
-								v1 = getbitu(rtcm->buff, 85, 25);
-								v2 = getbitu(rtcm->buff, 124, 7);
-								v3 = getbitu(rtcm->buff, 131, 2);
-								v4 = getbitu(rtcm->buff, 135, 3);
+								int vers = getbitu(rtcm->buff, 24 + 12, 3);
+								int stype = getbitu(rtcm->buff, 24 + 12 + 3, 9);
+								if (stype == 300)
+								{
+									v1 = getbitu(rtcm->buff, 85, 25);
+									v2 = getbitu(rtcm->buff, 124, 7);
+									v3 = getbitu(rtcm->buff, 131, 2);
+									v4 = getbitu(rtcm->buff, 135, 3);
+								}
 							}
+							else 
+							{
+								if (flag & (1 << 7))
+								{
+									/* output rtcm obs data in 1 s, but output others as regular intervals */
+									if (!fRTCM) fRTCM = set_output_file(fname, "log.rtcm");
+									if (is_rtcm2_obs_data(type) || is_rtcm3_obs_data(type))
+									{
+										int wk = 0;
+										double ws = time2gpst(rtcm->time, &wk);
+										if (fabs(ws - floor(ws + 0.5)) < 0.01)
+										{
+											if (fRTCM) fwrite(rtcm->buff, sizeof(char), rtcm->len + 3, fRTCM);
+										}
+									}
+									else
+									{
+										if (fRTCM) fwrite(rtcm->buff, sizeof(char), rtcm->len + 3, fRTCM);
+									}
+								}
+								if (flag & (1 << 8))
+								{
+									/* output rtcm obs data in 30 s, but output others as regular intervals */
+									if (!fRTCM30) fRTCM30 = set_output_file(fname, "30.rtcm");
+									if (is_rtcm2_obs_data(type) || is_rtcm3_obs_data(type))
+									{
+										int wk = 0;
+										double ws_30 = time2gpst(rtcm->time, &wk) / 30.0;
+										if (fabs(ws_30 - floor(ws_30 + 0.5)) < (0.01 / 30.0))
+										{
+											if (fRTCM30) fwrite(rtcm->buff, sizeof(char), rtcm->len + 3, fRTCM30);
+										}
+									}
+									else
+									{
+										if (fRTCM30) fwrite(rtcm->buff, sizeof(char), rtcm->len + 3, fRTCM30);
+									}
+								}
+							}
+							rtcm->len = 0;
 						}
 						if (ret1 == 1)
 						{
@@ -1048,7 +1111,7 @@ static int log2rtcm(const char *fname, int flag, std::string brdcfname)
 						if (ret1 == 5) update_epoch_pos(vEpoch, rtcm);
 						/* done */
 					}
-					if (fRTCM) fwrite(tempBuff, sizeof(char), slen - 2, fRTCM);
+					//if (fRTCM) fwrite(tempBuff, sizeof(char), slen - 2, fRTCM);
 				}
 				delete[]tempBuff;
 			}
@@ -1063,6 +1126,7 @@ static int log2rtcm(const char *fname, int flag, std::string brdcfname)
 
 	if (fLOG) fclose(fLOG);
 	if (fRTCM) fclose(fRTCM);
+	if (fRTCM30) fclose(fRTCM30);
 	if (fBRDC) fclose(fBRDC);
 	if (fCSV) fclose(fCSV);
 
@@ -1072,11 +1136,14 @@ static int log2rtcm(const char *fname, int flag, std::string brdcfname)
 	return ret;
 }
 
+
+
 static int procrtcm(const char* fname, int flag, std::string brdcfname, int year, int mon, int day)
 {
 	int ret = 0;
 	FILE* fLOG = fopen(fname, "rb");
 	FILE* fRTCM = nullptr;
+	FILE* fRTCM30 = nullptr;
 	rtcm_t* rtcm = new rtcm_t;
 	init_rtcm(rtcm);
 
@@ -1109,6 +1176,7 @@ static int procrtcm(const char* fname, int flag, std::string brdcfname, int year
 		int ret = input_rtcm3(rtcm, data);
 		if (ret==2) brdc.add_nav_eph(rtcm);
 	}
+	rtcm->obs.n = 0;
 	while (fLOG && !feof(fLOG) && (data = fgetc(fLOG)) != EOF)
 	{
 		int ret1 = input_rtcm3(rtcm, data);
@@ -1122,7 +1190,6 @@ static int procrtcm(const char* fname, int flag, std::string brdcfname, int year
 				rtcm->len = 0;
 				continue;
 			}
-			rtcm->len = 0;
 			int type = getbitu(rtcm->buff, 24, 12);
 			if (type == 4054)
 			{
@@ -1144,7 +1211,46 @@ static int procrtcm(const char* fname, int flag, std::string brdcfname, int year
 					v4 = getbitu(rtcm->buff, 135, 3);
 				}
 			}
-
+			else
+			{
+				if (flag & (1 << 7))
+				{
+					/* output rtcm obs data in 1 s, but output others as regular intervals */
+					if (!fRTCM) fRTCM = set_output_file(fname, "log.rtcm3");
+					if (is_rtcm2_obs_data(type) || is_rtcm3_obs_data(type))
+					{
+						int wk = 0;
+						double ws = time2gpst(rtcm->time, &wk);
+						if (fabs(ws - floor(ws + 0.5)) < 0.01)
+						{
+							if (fRTCM) fwrite(rtcm->buff, sizeof(char), rtcm->len + 3, fRTCM);
+						}
+					}
+					else
+					{
+						if (fRTCM) fwrite(rtcm->buff, sizeof(char), rtcm->len + 3, fRTCM);
+					}
+				}
+				if (flag & (1 << 8))
+				{
+					/* output rtcm obs data in 30 s, but output others as regular intervals */
+					if (!fRTCM30) fRTCM30 = set_output_file(fname, "30.rtcm3");
+					if (is_rtcm2_obs_data(type) || is_rtcm3_obs_data(type))
+					{
+						int wk = 0;
+						double ws_30 = time2gpst(rtcm->time, &wk) / 30.0;
+						if (fabs(ws_30 - floor(ws_30 + 0.5)) < (0.01 / 30.0))
+						{
+							if (fRTCM30) fwrite(rtcm->buff, sizeof(char), rtcm->len + 3, fRTCM30);
+						}
+					}
+					else
+					{
+						if (fRTCM30) fwrite(rtcm->buff, sizeof(char), rtcm->len + 3, fRTCM30);
+					}
+				}
+			}
+			rtcm->len = 0;
 		}
 		if (ret1 == 1)
 		{
@@ -1184,6 +1290,7 @@ static int procrtcm(const char* fname, int flag, std::string brdcfname, int year
 
 	if (fLOG) fclose(fLOG);
 	if (fRTCM) fclose(fRTCM);
+	if (fRTCM30) fclose(fRTCM30);
 	if (fBRDC) fclose(fBRDC);
 	if (fSAT) fclose(fSAT);
 	if (fCSV) fclose(fCSV);
@@ -1198,7 +1305,7 @@ int main(int argc, char* argv[])
 {
 	if (argc < 2)
 	{
-		printf("log2rtcm file [rtcm=1] [date=yyyy,mm,dd] [brdc=file] [outsatpos=1] [outsatinf=1]");
+		printf("log2rtcm file [rtcm=1] [date=yyyy,mm,dd] [brdc=file] [outsatpos=1] [outsatinf=1] [outrtcm1=1] [outrtcm30=1]");
 	}
 	else
 	{
@@ -1218,6 +1325,10 @@ int main(int argc, char* argv[])
 		flag |= 1 << 1;	/* set Health flag as default */
 		flag |= 1 << 5;	/* set time flag as default */
 		flag |= 1 << 6;	/* set geod flag as default */
+		//flag |= 1 << 7; /* set output 1 s rtcm data by default */
+		flag |= 1 << 8; /* set output 30s rtcm data by default */
+
+		int is_rtcm_format = 0;
 
 		for (int i = 2; i < argc; ++i)
 		{
@@ -1267,13 +1378,31 @@ int main(int argc, char* argv[])
 			}	
 			if (strstr(argv[i], "rtcm") && (temp = strrchr(argv[i], '=')))
 			{
-				if (atoi(temp + 1))
+				if (strstr(argv[i], "outrtcm1"))
 				{
-					flag |= 1 << 4;		/* set rtcm format flag */
+					if (atoi(temp + 1))
+					{
+						flag |= 1 << 7;		/* set output 1 s rtcm data flag */
+					}
+					else
+					{
+						flag &= ~(1 << 7);	/* clear output 1 s rtcm data flag */
+					}
+				}
+				else if (strstr(argv[i], "outrtcm30"))
+				{
+					if (atoi(temp + 1))
+					{
+						flag |= 1 << 8;		/* set output 30s rtcm data flag */
+					}
+					else
+					{
+						flag &= ~(1 << 8);	/* clear output 30s rtcm data flag */
+					}
 				}
 				else
 				{
-					flag &= ~(1 << 4);	/* clear rtcm format flag */
+					is_rtcm_format = atoi(temp + 1);
 				}
 			}
 			if (strstr(argv[i], "time") && (temp = strrchr(argv[i], '=')))
@@ -1312,7 +1441,7 @@ int main(int argc, char* argv[])
 				}
 			}
 		}
-		if (flag & (1<<4))
+		if (is_rtcm_format)
 			procrtcm(argv[1], flag, brdcfname, year, mon, day);
 		else
 			log2rtcm(argv[1], flag, brdcfname);
