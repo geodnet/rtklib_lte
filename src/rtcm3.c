@@ -160,6 +160,12 @@ const char *msm_sig_irn[32]={
     ""  ,""  ,""  ,""  ,""  ,""  ,""  ,""  ,""  ,"5A",""  ,""  ,
     ""  ,""  ,""  ,""  ,""  ,""  ,""  ,""
 };
+const char *msm_sig_leo[32]={
+    /* LEO/XONA */
+    ""  ,""  ,""  ,""  ,"1X",""  ,""  ,""  ,""  ,""  ,""  ,""  ,
+    ""  ,""  ,""  ,""  ,""  ,""  ,""  ,""  ,""  ,""  ,""  ,"5X",
+    ""  ,""  ,""  ,""  ,""  ,""  ,""  ,""
+};
 /* rtcm signal to rinex obs type */
 extern uint8_t rtcm2code(int sys, uint8_t sig)
 {
@@ -174,6 +180,7 @@ extern uint8_t rtcm2code(int sys, uint8_t sig)
             case SYS_SBS: code=obs2code(msm_sig_sbs[sig-1]); break;
             case SYS_CMP: code=obs2code(msm_sig_cmp[sig-1]); break;
             case SYS_IRN: code=obs2code(msm_sig_irn[sig-1]); break;
+            case SYS_LEO: code=obs2code(msm_sig_leo[sig-1]); break;
             default: break;
         }
     }
@@ -2052,9 +2059,9 @@ static void save_msm_obs(rtcm_t *rtcm, int sys, msm_h_t *h, const double *r,
 {
     const char *sig[32];
     double tt,freq;
-    uint8_t code[32];
+    uint8_t code[32]={0};
     char *msm_type="",*q=NULL;
-    int i,j,k,type,prn,sat,fcn,index=0,idx[32],k1=0,k2=0;
+    int i,j,k,type,prn,sat,fcn,index=0,idx[32]={0},k1=0,k2=0;
     
     type=getbitu(rtcm->buff,24,12);
     
@@ -2066,6 +2073,7 @@ static void save_msm_obs(rtcm_t *rtcm, int sys, msm_h_t *h, const double *r,
         case SYS_SBS: msm_type=q=rtcm->msmtype[4]; break;
         case SYS_CMP: msm_type=q=rtcm->msmtype[5]; break;
         case SYS_IRN: msm_type=q=rtcm->msmtype[6]; break;
+        case SYS_LEO: msm_type=q=rtcm->msmtype[7]; break;
     }
     /* id to signal */
     for (i=0;i<h->nsig;i++) {
@@ -2077,6 +2085,7 @@ static void save_msm_obs(rtcm_t *rtcm, int sys, msm_h_t *h, const double *r,
             case SYS_SBS: sig[i]=msm_sig_sbs[h->sigs[i]-1]; break;
             case SYS_CMP: sig[i]=msm_sig_cmp[h->sigs[i]-1]; break;
             case SYS_IRN: sig[i]=msm_sig_irn[h->sigs[i]-1]; break;
+            case SYS_LEO: sig[i]=msm_sig_leo[h->sigs[i]-1]; break;
             default: sig[i]=""; break;
         }
         /* signal to rinex obs type */
@@ -2183,7 +2192,7 @@ static int decode_msm_head(rtcm_t *rtcm, int sys, int *sync, int *iod,
     int i=24,j,dow,mask,staid,type,ncell=0;
     
     type=getbitu(rtcm->buff,i,12); i+=12;
-    
+    if (type==4045) i+= (3+9); /* skip the version and sub-type for LEO/XONA 4045 ID and sub-type 4,5,6,7 */
     *h=h0;
     if (i+157<=rtcm->len*8) {
         staid     =getbitu(rtcm->buff,i,12);       i+=12;
@@ -2446,7 +2455,12 @@ static int decode_msm7(rtcm_t *rtcm, int sys)
     
     /* decode msm header */
     if ((ncell=decode_msm_head(rtcm,sys,&sync,&iod,&h,&i))<0) return -1;
-    
+#if 1 /* temp fix for the xona data before 11/20/2025, since the rtcm sync flag issue */
+   if (type==1127)
+        sync=0;
+   else
+       sync=1;
+#endif    
     if (i+h.nsat*36+ncell*80>rtcm->len*8) {
         trace(2,"rtcm3 %d length error: nsat=%d ncell=%d len=%d\n",type,h.nsat,
               ncell,rtcm->len);
@@ -2533,6 +2547,28 @@ static int decode_type1230(rtcm_t *rtcm)
         }
     }
     return 5;
+}
+/* decode type 4045: proprietary LEO/XONA message ------------------------------*/
+static int decode_type4045(rtcm_t *rtcm)
+{
+    int i=24+12,ver,subtype;
+    
+    if (i+3+8>=rtcm->len*8) {
+        trace(2,"rtcm3 4045: length error len=%d\n",rtcm->len);
+        return -1;
+    }
+    ver    =getbitu(rtcm->buff,i,3); i+=3;
+    subtype=getbitu(rtcm->buff,i,9); i+=9;
+    
+    if (rtcm->outtype) {
+        sprintf(rtcm->msgtype+strlen(rtcm->msgtype)," ver=%d subtype=%3d",ver,
+                subtype);
+    }
+    switch (subtype) {
+        case   7: return decode_msm7(rtcm,SYS_LEO);
+    }
+    trace(2,"rtcm3 4045: unsupported message subtype=%d\n",subtype);
+    return 0;
 }
 /* decode type 4073: proprietary message Mitsubishi Electric -----------------*/
 static int decode_type4073(rtcm_t *rtcm)
@@ -2755,6 +2791,7 @@ extern int decode_rtcm3(rtcm_t *rtcm)
         case   12: ret=decode_ssr7(rtcm,SYS_GAL,0); break; /* tentative */
         case   13: ret=decode_ssr7(rtcm,SYS_QZS,0); break; /* tentative */
         case   14: ret=decode_ssr7(rtcm,SYS_CMP,0); break; /* tentative */
+        case 4045: ret=decode_type4045(rtcm); break;
         case 4073: ret=decode_type4073(rtcm); break;
         case 4076: ret=decode_type4076(rtcm); break;
     }

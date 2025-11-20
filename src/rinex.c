@@ -132,9 +132,9 @@
 #define NINCOBS     262144              /* incremental number of obs data */
 
 static const int navsys[]={             /* satellite systems */
-    SYS_GPS,SYS_GLO,SYS_GAL,SYS_QZS,SYS_SBS,SYS_CMP,SYS_IRN,0
+    SYS_GPS,SYS_GLO,SYS_GAL,SYS_QZS,SYS_SBS,SYS_CMP,SYS_IRN,SYS_LEO
 };
-static const char syscodes[]="GREJSCI"; /* satellite system codes */
+static const char syscodes[]="GREJSCIX"; /* satellite system codes */
 
 static const char obscodes[]="CLDS";    /* observation type codes */
 
@@ -205,6 +205,7 @@ static int sat2code(int sat, char *code)
         case SYS_QZS: sprintf(code,"J%02d",prn-MINPRNQZS+1); break;
         case SYS_CMP: sprintf(code,"C%02d",prn-MINPRNCMP+1); break;
         case SYS_IRN: sprintf(code,"I%02d",prn-MINPRNIRN+1); break;
+        case SYS_LEO: sprintf(code,"X%02d",prn-MINPRNLEO+1); break;
         default: return 0;
     }
     return 1;
@@ -2336,6 +2337,7 @@ extern int outrnxobsb(FILE *fp, const rnxopt_t *opt, const obsd_t *obs, int n,
             case SYS_SBS: s[ns]=4; break;
             case SYS_CMP: s[ns]=5; break;
             case SYS_IRN: s[ns]=6; break;
+            case SYS_LEO: s[ns]=7; break;
         }
         if (!opt->nobs[(opt->rnxver<=299)?0:s[ns]]) continue;
         ind[ns++]=i;

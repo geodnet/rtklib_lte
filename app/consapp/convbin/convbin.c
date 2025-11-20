@@ -509,10 +509,10 @@ static int cmdopts(int argc, char **argv, rnxopt_t *opt, char **ifile,
     char *p,*sys,*fmt="",*paths[1],path[1024],buff[256];
     
     opt->rnxver=304;
-    opt->obstype=OBSTYPE_PR|OBSTYPE_CP;
-    opt->navsys=SYS_GPS|SYS_GLO|SYS_GAL|SYS_QZS|SYS_SBS|SYS_CMP|SYS_IRN;
+    opt->obstype=OBSTYPE_PR|OBSTYPE_CP|OBSTYPE_DOP|OBSTYPE_SNR;
+    opt->navsys=SYS_GPS|SYS_GLO|SYS_GAL|SYS_QZS|SYS_SBS|SYS_CMP|SYS_IRN|SYS_LEO;
     opt->option=0;
-    for (i=0;i<6;i++) for (j=0;j<64;j++) opt->mask[i][j]='1';
+    for (i=0;i<8;i++) for (j=0;j<64;j++) opt->mask[i][j]='1';
     
     for (i=1;i<argc;i++) {
         if (!strcmp(argv[i],"-ts")&&i+2<argc) {

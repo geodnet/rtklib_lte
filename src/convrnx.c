@@ -47,7 +47,7 @@
 #include "rtklib.h"
 
 #define NOUTFILE        9       /* number of output files */
-#define NSATSYS         7       /* number of satellite systems */
+#define NSATSYS         8       /* number of satellite systems */
 #define TSTARTMARGIN    60.0    /* time margin for file name replacement */
 
 #define EVENT_STARTMOVE 2       /* rinex event start moving antenna */
@@ -90,7 +90,7 @@ typedef struct {                /* stream file type */
 
 /* global variables ----------------------------------------------------------*/
 static const int navsys[]={     /* system codes */
-    SYS_GPS,SYS_GLO,SYS_GAL,SYS_QZS,SYS_SBS,SYS_CMP,SYS_IRN,0
+    SYS_GPS,SYS_GLO,SYS_GAL,SYS_QZS,SYS_SBS,SYS_CMP,SYS_IRN,SYS_LEO
 };
 static const char vercode[][MAXCODE]={ /* supported obs-type by RINEX version */
   /* 0........1.........2.........3.........4.........5.........6........          */
@@ -102,7 +102,8 @@ static const char vercode[][MAXCODE]={ /* supported obs-type by RINEX version */
     "2.....22...22..222.....222......2422....................4444........", /* QZS */
     "0......................000..........................................", /* SBS */
     ".4...4...4.4.....1.......41114..1.....41111............444..44444...", /* BDS */
-    ".........................3......................3333333............."  /* IRN */
+    ".........................3......................3333333.............", /* IRN */
+    "...........0.............0.........................................."  /* LEO/XONA */
 };
 /* convert RINEX obs-type ver.3 -> ver.2 -------------------------------------*/
 static void convcode(int rnxver, int sys, char *type)
@@ -1139,9 +1140,9 @@ static int scan_file(char **files, int nf, rnxopt_t *opt, strfile_t *str,
             }
             if (++c%11) continue;
             
-            sprintf(msg,"scanning: %s %s%s%s%s%s%s%s",time_str(str->time,0),
+            sprintf(msg,"scanning: %s %s%s%s%s%s%s%s%s",time_str(str->time,0),
                     n[0]?"G":"",n[1]?"R":"",n[2]?"E":"",n[3]?"J":"",
-                    n[4]?"S":"",n[5]?"C":"",n[6]?"I":"");
+                    n[4]?"S":"",n[5]?"C":"",n[6]?"I":"",n[7]?"X":"");
             if ((abort=showmsg(msg))) break;
         }
         close_strfile(str);
