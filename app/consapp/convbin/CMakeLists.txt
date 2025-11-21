@@ -3,7 +3,7 @@ project(convbin)
 
 set(CMAKE_CXX_STANDARD 17)
 
-add_definitions(-DTRACE -DENAGLO -DENAQZS -DENAGAL -DENACMP -DENAIRN -DNFREQ=7 -DNEXOBS=3)
+add_definitions(-DTRACE -DENAGLO -DENAQZS -DENAGAL -DENACMP -DENAIRN -DENALEO -DNFREQ=7 -DNEXOBS=3)
 include_directories(./)
 include_directories(../../../src)
 include_directories(../../../src/rcv)

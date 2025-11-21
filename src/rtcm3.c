@@ -2455,7 +2455,7 @@ static int decode_msm7(rtcm_t *rtcm, int sys)
     
     /* decode msm header */
     if ((ncell=decode_msm_head(rtcm,sys,&sync,&iod,&h,&i))<0) return -1;
-#if 1 /* temp fix for the xona data before 11/20/2025, since the rtcm sync flag issue */
+#if 0 /* temp fix for the xona data before 11/21/2025, since the rtcm sync flag issue */
    if (type==1127)
         sync=0;
    else
