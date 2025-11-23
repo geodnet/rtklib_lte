@@ -3382,7 +3382,7 @@ static int mkdir_r(const char *dir)
     sprintf(pdir,"%.1023s",dir);
     if ((p=strrchr(pdir,FILEPATHSEP))) {
         *p='\0';
-        h=FindFirstFile((LPCWSTR)pdir,&data);
+        h=FindFirstFile((LPCSTR)pdir,&data);
         if (h==INVALID_HANDLE_VALUE) {
             if (!mkdir_r(pdir)) return 0;
         }
