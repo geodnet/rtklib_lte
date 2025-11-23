@@ -1,3 +1,5 @@
+# cmake --build . --config Release
+
 cmake_minimum_required(VERSION 3.16)
 project(convbin)
 
@@ -36,4 +38,8 @@ add_executable(convbin
     ../../../src/rcv/ublox.c
     )
 
-target_link_libraries(convbin m)
+if(WIN32)
+    target_link_libraries(convbin Winmm.lib)
+else()
+    target_link_libraries(convbin m)
+endif()
