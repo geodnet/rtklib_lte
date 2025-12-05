@@ -2164,7 +2164,10 @@ static void save_msm_obs(rtcm_t *rtcm, int sys, msm_h_t *h, const double *r,
                 }
                 rtcm->obs.data[index].LLI[idx[k]]=
                     lossoflock(rtcm,sat,idx[k],lock[j])+(half[j]?3:0);
-                rtcm->obs.data[index].SNR [idx[k]]=(uint16_t)(cnr[j]/SNR_UNIT+0.5);
+                if (sys==SYS_LEO)
+                    rtcm->obs.data[index].SNR [idx[k]]=(uint16_t)((cnr[j]+20.0)/SNR_UNIT+0.5); /* offset 20 db for xona (starting from 12/02/2025) */
+                else
+                    rtcm->obs.data[index].SNR [idx[k]]=(uint16_t)(cnr[j]/SNR_UNIT+0.5);
                 rtcm->obs.data[index].code[idx[k]]=code[k];
             }
             j++;
@@ -2569,6 +2572,11 @@ static int decode_type4045(rtcm_t *rtcm)
         sprintf(rtcm->msgtype+strlen(rtcm->msgtype)," ver=%d subtype=%3d",ver,
                 subtype);
     }
+    if (subtype<4||subtype>7)
+    {   
+        trace(2,"rtcm3 4045: unsupported message subtype=%d\n",subtype);
+	    return 0;
+    }
     switch (subtype) {
         case   7: return decode_msm7(rtcm,SYS_LEO);
     }
@@ -2799,6 +2807,9 @@ extern int decode_rtcm3(rtcm_t *rtcm)
         case 4045: ret=decode_type4045(rtcm); break;
         case 4073: ret=decode_type4073(rtcm); break;
         case 4076: ret=decode_type4076(rtcm); break;
+    }
+    if (type==4046) {
+        trace(2, "rtcm3 4046: unsupported message\n");
     }
     if (ret>=0) {
         if      (1001<=type&&type<=1299) rtcm->nmsg3[type-1000]++; /*   1-299 */
