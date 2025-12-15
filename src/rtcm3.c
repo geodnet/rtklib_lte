@@ -508,8 +508,8 @@ static int decode_type1005(rtcm_t *rtcm)
         msg=rtcm->msgtype+strlen(rtcm->msgtype);
         for (j=0;j<3;j++) re[j]=rr[j]*0.0001;
         ecef2pos(re,pos);
-        sprintf(msg," staid=%4d pos=%.8f %.8f %.3f",staid,pos[0]*R2D,pos[1]*R2D,
-                pos[2]);
+        sprintf(msg," staid=%4d pos=%.8f %.8f %.3f %14.4f%14.4f%14.4f",staid,pos[0]*R2D,pos[1]*R2D,
+                pos[2],rr[0]*0.0001,rr[1]*0.0001,rr[2]*0.0001);
     }
     /* test station id */
     if (!test_staid(rtcm,staid)) return -1;
@@ -547,8 +547,8 @@ static int decode_type1006(rtcm_t *rtcm)
         msg=rtcm->msgtype+strlen(rtcm->msgtype);
         for (j=0;j<3;j++) re[j]=rr[j]*0.0001;
         ecef2pos(re,pos);
-        sprintf(msg," staid=%4d pos=%.8f %.8f %.3f anth=%.3f",staid,pos[0]*R2D,
-                pos[1]*R2D,pos[2],anth*0.0001);
+        sprintf(msg," staid=%4d pos=%.8f %.8f %.3f anth=%.3f %14.4f%14.4f%14.4f",staid,pos[0]*R2D,
+                pos[1]*R2D,pos[2],anth*0.0001,rr[0]*0.0001,rr[1]*0.0001,rr[2]*0.0001);
     }
     /* test station id */
     if (!test_staid(rtcm,staid)) return -1;
@@ -2164,30 +2164,27 @@ static void save_msm_obs(rtcm_t *rtcm, int sys, msm_h_t *h, const double *r,
                 }
                 rtcm->obs.data[index].LLI[idx[k]]=
                     lossoflock(rtcm,sat,idx[k],lock[j])+(half[j]?3:0);
-                if (sys==SYS_LEO)
-                    rtcm->obs.data[index].SNR [idx[k]]=(uint16_t)((cnr[j]+20.0)/SNR_UNIT+0.5); /* offset 20 db for xona (starting from 12/02/2025) */
-                else
-                    rtcm->obs.data[index].SNR [idx[k]]=(uint16_t)(cnr[j]/SNR_UNIT+0.5);
+                rtcm->obs.data[index].SNR [idx[k]]=(uint16_t)(cnr[j]/SNR_UNIT+0.5);
                 rtcm->obs.data[index].code[idx[k]]=code[k];
             }
             j++;
         }
-		/* 2X to 2W using DCB if there is no 2W for GPS */
-		if (sys==SYS_GPS&&fabs(g_2w_2x_dcb[prn-1]-99.9999)>0.01) {
-			for (k2=0;k2<(NFREQ+NEXOBS);++k2) {
-				if (rtcm->obs.data[index].code[k2]==CODE_L2W) break;
-			}
-			if (k2==(NFREQ+NEXOBS)) { /* find 2X */
-				for (k1=0;k1<(NFREQ+NEXOBS);++k1) {
-					if (rtcm->obs.data[index].code[k1]==CODE_L2X) break;
-				}
-				if (k1<(NFREQ+NEXOBS)&&(k2=code2idx(sys,CODE_L2W))<(NFREQ+NEXOBS)) { /* found 2X */
-					rtcm->obs.data[index].code[k2]=CODE_L2W;
-					rtcm->obs.data[index].P[k2]=fabs(rtcm->obs.data[index].P[k1])<0.001?0:(rtcm->obs.data[index].P[k1]+g_2w_2x_dcb[prn-1]*NSM); /* convert ns to meter */
-					rtcm->obs.data[index].L[k2]=rtcm->obs.data[index].L[k1];
-				}
-			}
-		}
+        /* 2X to 2W using DCB if there is no 2W for GPS */
+        if (sys==SYS_GPS&&fabs(g_2w_2x_dcb[prn-1]-99.9999)>0.01) {
+            for (k2=0;k2<(NFREQ+NEXOBS);++k2) {
+                if (rtcm->obs.data[index].code[k2]==CODE_L2W) break;
+            }
+            if (k2==(NFREQ+NEXOBS)) { /* find 2X */
+                for (k1=0;k1<(NFREQ+NEXOBS);++k1) {
+                    if (rtcm->obs.data[index].code[k1]==CODE_L2X) break;
+                }
+                if (k1<(NFREQ+NEXOBS)&&(k2=code2idx(sys,CODE_L2W))<(NFREQ+NEXOBS)) { /* found 2X */
+                    rtcm->obs.data[index].code[k2]=CODE_L2W;
+                    rtcm->obs.data[index].P[k2]=fabs(rtcm->obs.data[index].P[k1])<0.001?0:(rtcm->obs.data[index].P[k1]+g_2w_2x_dcb[prn-1]*NSM); /* convert ns to meter */
+                    rtcm->obs.data[index].L[k2]=rtcm->obs.data[index].L[k1];
+                }
+            }
+        }
     }
 }
 /* decode type MSM message header --------------------------------------------*/
@@ -2463,12 +2460,6 @@ static int decode_msm7(rtcm_t *rtcm, int sys)
     
     /* decode msm header */
     if ((ncell=decode_msm_head(rtcm,sys,&sync,&iod,&h,&i))<0) return -1;
-#if 0 /* temp fix for the xona data before 11/21/2025, since the rtcm sync flag issue */
-   if (type==1127)
-        sync=0;
-   else
-       sync=1;
-#endif    
     if (i+h.nsat*36+ncell*80>rtcm->len*8) {
         trace(2,"rtcm3 %d length error: nsat=%d ncell=%d len=%d\n",type,h.nsat,
               ncell,rtcm->len);
@@ -2561,7 +2552,7 @@ static int decode_type4045(rtcm_t *rtcm)
 {
     int i=24+12,ver,subtype;
     
-    if (i+3+8>=rtcm->len*8) {
+    if (i+3+9>=rtcm->len*8) {
         trace(2,"rtcm3 4045: length error len=%d\n",rtcm->len);
         return -1;
     }
@@ -2581,6 +2572,25 @@ static int decode_type4045(rtcm_t *rtcm)
         case   7: return decode_msm7(rtcm,SYS_LEO);
     }
     trace(2,"rtcm3 4045: unsupported message subtype=%d\n",subtype);
+    return 0;
+}
+/* decode type 4054: proprietary GEODNET message -------------------------------*/
+static int decode_type4054(rtcm_t *rtcm)
+{
+    int i=24+12,ver,subtype;
+    
+    if (i+3+9>=rtcm->len*8) {
+        trace(2,"rtcm3 4054: length error len=%d\n",rtcm->len);
+        return -1;
+    }
+    ver    =getbitu(rtcm->buff,i,3); i+=3;
+    subtype=getbitu(rtcm->buff,i,9); i+=9;
+    
+    if (rtcm->outtype) {
+        sprintf(rtcm->msgtype+strlen(rtcm->msgtype)," ver=%d subtype=%3d",ver,
+                subtype);
+    }
+    trace(2,"rtcm3 4054: unsupported message subtype=%d\n",subtype);
     return 0;
 }
 /* decode type 4073: proprietary message Mitsubishi Electric -----------------*/
@@ -2805,6 +2815,7 @@ extern int decode_rtcm3(rtcm_t *rtcm)
         case   13: ret=decode_ssr7(rtcm,SYS_QZS,0); break; /* tentative */
         case   14: ret=decode_ssr7(rtcm,SYS_CMP,0); break; /* tentative */
         case 4045: ret=decode_type4045(rtcm); break;
+        case 4054: ret=decode_type4054(rtcm); break;
         case 4073: ret=decode_type4073(rtcm); break;
         case 4076: ret=decode_type4076(rtcm); break;
     }

@@ -98,8 +98,8 @@ extern "C" {
 #define FREQ1_CMP   1.561098E9          /* BDS B1I     frequency (Hz) */
 #define FREQ2_CMP   1.20714E9           /* BDS B2I/B2b frequency (Hz) */
 #define FREQ3_CMP   1.26852E9           /* BDS B3      frequency (Hz) */
-#define FREQX1      1.5933225E9		    /* XONA X-1 */
-#define FREQX5      1.19051625E9	    /* XONA X-5 */
+#define FREQX1      1.5933225E9         /* XONA X-1 */
+#define FREQX5      1.19051625E9        /* XONA X-5 */
 
 #define EFACT_GPS   1.0                 /* error factor: GPS */
 #define EFACT_GLO   1.5                 /* error factor: GLONASS */
